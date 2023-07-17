@@ -4193,7 +4193,11 @@
      :tag (symbol (str ns) (str name))}))
 
 (defn elide-reader-meta [m]
-  (dissoc m :file :line :column :end-column :end-line :source))
+  ;; I think enumerating the keys here is a flaw in ClojureScript since
+  ;; the Clojure reader can't evolve by adding to the meta without breaking the
+  ;; ClojureScript compiler. Since ClojureStorm is extending the Lisp reader with an
+  ;; extra key we need to add it here
+  (dissoc m :file :line :column :end-column :end-line :source :clojure.storm/coord))
 
 (defn elide-analyzer-meta [m]
   (dissoc m ::analyzed))
