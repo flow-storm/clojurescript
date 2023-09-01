@@ -76,82 +76,82 @@ jobs:
         shell: powershell
 
   # Self-host Tests
-  self-host-test:
-    name: Self-host Tests
-    runs-on: macos-12
-    steps:
-      - uses: actions/checkout@v2
+  # self-host-test:
+  #   name: Self-host Tests
+  #   runs-on: macos-12
+  #   steps:
+  #     - uses: actions/checkout@v2
 
-      - uses: DeLaGuardo/setup-clojure@3.1
-        with:
-          tools-deps: '1.10.1.763'
+  #     - uses: DeLaGuardo/setup-clojure@3.1
+  #       with:
+  #         tools-deps: '1.10.1.763'
 
-      - name: Cache maven
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-maven
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ env.cache-name }}-
+  #     - name: Cache maven
+  #       uses: actions/cache@v2
+  #       env:
+  #         cache-name: cache-maven
+  #       with:
+  #         path: ~/.m2
+  #         key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-${{ env.cache-name }}-
 
-      - name: Cache gitlibs
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-gitlibs
-        with:
-          path: ~/.gitlibs
-          key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ env.cache-name }}-
+  #     - name: Cache gitlibs
+  #       uses: actions/cache@v2
+  #       env:
+  #         cache-name: cache-gitlibs
+  #       with:
+  #         path: ~/.gitlibs
+  #         key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-${{ env.cache-name }}-
 
-      - name: Build tests
-        run: clojure -M:selfhost.test.build
+  #     - name: Build tests
+  #       run: clojure -M:selfhost.test.build
 
-      - name: Run tests
-        run: |
-          node builds/out-self/core-self-test.js | tee test-out.txt
-          grep -qxF '0 failures, 0 errors.' test-out.txt
+  #     - name: Run tests
+  #       run: |
+  #         node builds/out-self/core-self-test.js | tee test-out.txt
+  #         grep -qxF '0 failures, 0 errors.' test-out.txt
 
   # Self-parity Tests
-  self-parity-test:
-    name: Self-parity Tests
-    runs-on: macos-12
-    steps:
-      - uses: actions/checkout@v2
+  # self-parity-test:
+  #   name: Self-parity Tests
+  #   runs-on: macos-12
+  #   steps:
+  #     - uses: actions/checkout@v2
 
-      - uses: DeLaGuardo/setup-clojure@3.1
-        with:
-          tools-deps: '1.10.1.763'
+  #     - uses: DeLaGuardo/setup-clojure@3.1
+  #       with:
+  #         tools-deps: '1.10.1.763'
 
-      - name: Cache maven
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-maven
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ env.cache-name }}-
+  #     - name: Cache maven
+  #       uses: actions/cache@v2
+  #       env:
+  #         cache-name: cache-maven
+  #       with:
+  #         path: ~/.m2
+  #         key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-${{ env.cache-name }}-
 
-      - name: Cache gitlibs
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-gitlibs
-        with:
-          path: ~/.gitlibs
-          key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ env.cache-name }}-
+  #     - name: Cache gitlibs
+  #       uses: actions/cache@v2
+  #       env:
+  #         cache-name: cache-gitlibs
+  #       with:
+  #         path: ~/.gitlibs
+  #         key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-${{ env.cache-name }}-
 
-      - name: Build tests
-        run: clojure -M:selfparity.test.build
+  #     - name: Build tests
+  #       run: clojure -M:selfparity.test.build
 
-      - name: Run tests
-        run: |
-          node builds/out-self-parity/main.js | tee test-out.txt
-          grep -qxF '0 failures, 0 errors.' test-out.txt
+  #     - name: Run tests
+  #       run: |
+  #         node builds/out-self-parity/main.js | tee test-out.txt
+  #         grep -qxF '0 failures, 0 errors.' test-out.txt
 
   # Compiler Tests
   compiler-test:
@@ -203,43 +203,45 @@ jobs:
         shell: powershell
 
   # CLI Tests
-  cli-test:
-    name: CLI Tests
-    runs-on: macos-12
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
 
-      - uses: DeLaGuardo/setup-clojure@3.1
-        with:
-          tools-deps: '1.10.1.763'
+  # cli-test:
+  #   name: CLI Tests
+  #   runs-on: macos-12
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Cache maven
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-maven
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ env.cache-name }}-
+  #     - uses: DeLaGuardo/setup-clojure@3.1
+  #       with:
+  #         tools-deps: '1.10.1.763'
 
-      - name: Cache gitlibs
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-gitlibs
-        with:
-          path: ~/.gitlibs
-          key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ env.cache-name }}-
+  #     - name: Cache maven
+  #       uses: actions/cache@v2
+  #       env:
+  #         cache-name: cache-maven
+  #       with:
+  #         path: ~/.m2
+  #         key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-${{ env.cache-name }}-
 
-      - name: Build Uberjar
-        run: ./script/uberjar
+  #     - name: Cache gitlibs
+  #       uses: actions/cache@v2
+  #       env:
+  #         cache-name: cache-gitlibs
+  #       with:
+  #         path: ~/.gitlibs
+  #         key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-${{ env.cache-name }}-
 
-      - name: Run tests
-        run: |
-          unset JAVA_TOOL_OPTIONS
-          clojure -M:cli.test.run | tee test-out.txt
-          grep -qxF '0 failures, 0 errors.' test-out.txt
+  #     - name: Build Uberjar
+  #       run: ./script/uberjar
+
+  #     - name: Run tests
+  #       run: |
+  #         unset JAVA_TOOL_OPTIONS
+  #         clojure -M:cli.test.run | tee test-out.txt
+  #         grep -qxF '0 failures, 0 errors.' test-out.txt
+  

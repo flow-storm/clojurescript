@@ -72,8 +72,10 @@
                '(defn foo []
                   (fn bar [])))
              [:init :methods 0 :body :ret :local]))
-          'cljs$user$foo_$_bar))
-  (is (= (comp/munge
+         'cljs$user$foo_$_bar))
+  ;; [STORM] disabling this test since doesn't make sense on storm,
+  ;; since we are automatically naming all annon fns with fn-(gensym)
+  #_(is (= (comp/munge
            (get-in
              (analyze aenv
                '(fn []
