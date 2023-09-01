@@ -21,7 +21,8 @@
                     [clojure.java.io :as io]
                     [clojure.set :as set]
                     [clojure.string :as string]
-                    [cljs.vendor.clojure.tools.reader :as reader])
+                    [cljs.vendor.clojure.tools.reader :as reader]
+                    [clojure.string :as str])
      :cljs (:require [cljs.analyzer :as ana]
                      [cljs.analyzer.impl :as ana.impl]
                      [cljs.env :as env]
@@ -446,7 +447,17 @@
    (defmacro emit-wrap [env & body]
      `(let [env# ~env]
         (when (= :return (:context env#)) (emits "return "))
-        ~@body
+        (if (and (:clojure.storm/coord env#)
+                 (#{:return :expr} (:context env#))
+                 (= "dev" (str (get-in env# [:ns :name]))))
+          (let [coord# (str/join "," (:clojure.storm/coord env#))
+                form-id# (:clojure.storm/form-id env#)]
+            (emits (case (:context env#)
+                     :return "cljs.storm.tracer.trace_fn_return( "
+                     :expr   "cljs.storm.tracer.trace_expr( "))
+            ~@body
+            (emits ",\"" coord# "\"," form-id# ")"  ))
+          (do ~@body))
         (when-not (= :expr (:context env#)) (emitln ";")))))
 
 (defmethod emit* :no-op [m])
@@ -895,17 +906,26 @@
 (defn emit-fn-method
   [{expr :body :keys [type name params env recurs]}]
   (emit-wrap env
-    (emits "(function " (munge name) "(")
-    (emit-fn-params params)
-    (emitln "){")
-    (when type
-      (emitln "var self__ = this;"))
-    (when recurs (emitln "while(true){"))
-    (emits expr)
-    (when recurs
-      (emitln "break;")
-      (emitln "}"))
-    (emits "})")))
+             (emits "(function " (munge name) "(")
+             (emit-fn-params params)
+             (emitln "){")
+             (when (= 'dev (get-in env [:ns :name]))
+               (emits "cljs.storm.tracer.trace_fn_call(arguments,\""             
+                      (str (:name name))
+                      "\",\""
+                      (str (get-in env [:ns :name]))
+                      "\","
+                      (get env :clojure.storm/form-id)
+                      ");")
+               (emits ))
+             (when type
+               (emitln "var self__ = this;"))
+             (when recurs (emitln "while(true){"))
+             (emits expr)
+             (when recurs
+               (emitln "break;")
+               (emitln "}"))
+             (emits "})")))
 
 (defn emit-arguments-to-array
   "Emit code that copies function arguments into an array starting at an index.

@@ -14,6 +14,7 @@
                                      no-warn with-warning-handlers wrapping-errors]]
              [cljs.env.macros :refer [ensure]]))
   #?(:clj  (:require [cljs.analyzer.impl :as impl]
+                     [cljs.storm.utils :as storm-utils]
                      [cljs.analyzer.impl.namespaces :as nses]
                      [cljs.analyzer.passes.and-or :as and-or]
                      [cljs.env :as env :refer [ensure]]
@@ -28,6 +29,7 @@
                      [cljs.vendor.clojure.tools.reader :as reader]
                      [cljs.vendor.clojure.tools.reader.reader-types :as readers])
      :cljs (:require [cljs.analyzer.impl :as impl]
+                     [cljs.storm.utils :as storm-utils]
                      [cljs.analyzer.impl.namespaces :as nses]
                      [cljs.analyzer.passes.and-or :as and-or]
                      [cljs.env :as env]
@@ -3679,7 +3681,7 @@
     (when (true? numeric)
       (validate :invalid-arithmetic #(every? numeric-type? %)))
     {:op :js
-     :env env
+     :env (assoc env :clojure.storm/coord (:clojure.storm/coord form-meta))
      :segs segs
      :args argexprs
      :tag tag
@@ -4071,7 +4073,9 @@
   "Given a env, an analysis environment, and form, a ClojureScript form,
    macroexpand the form once."
   [env form]
-  (wrapping-errors env (macroexpand-1* env form)))
+  (storm-utils/merge-meta
+   (wrapping-errors env (macroexpand-1* env form))
+   (meta form)))
 
 (declare analyze-list)
 

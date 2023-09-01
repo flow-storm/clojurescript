@@ -23,7 +23,8 @@
             [cljs.env :as env]
             [cljs.js-deps :as deps]
             [cljs.closure :as cljsc]
-            [cljs.source-map :as sm])
+            [cljs.source-map :as sm]
+            [cljs.storm.utils :as storm-utils])
   (:import [java.io File PushbackReader FileWriter PrintWriter]
            [java.net URL]
            [java.util Base64]
@@ -689,14 +690,26 @@
   ([repl-env env form]
     (eval-cljs repl-env env form *repl-opts*))
   ([repl-env env form opts]
-   (evaluate-form repl-env
-     (assoc env :ns (ana/get-namespace ana/*cljs-ns*))
-     "<cljs repl>"
-     form
-     ;; the pluggability of :wrap is needed for older JS runtimes like Rhino
-     ;; where catching the error will swallow the original trace
-     ((or (:wrap opts) wrap-fn) form)
-     opts)))
+   
+   (let [form-ns (ana/get-namespace ana/*cljs-ns*)
+         form-id (hash form)
+         storm-form (if (and (seq? form)
+                             (not (#{'ns 'in-ns 'require} (first form))))
+                      `(do
+                         (cljs.storm.tracer/register-form ~form-id ~(str (:name form-ns)) (quote ~form))
+                         ~form)
+                      form)]
+     
+     (evaluate-form repl-env
+                    (assoc env
+                           :ns form-ns
+                           :clojure.storm/form-id form-id)
+                    "<cljs repl>"
+                    storm-form
+                    ;; the pluggability of :wrap is needed for older JS runtimes like Rhino
+                    ;; where catching the error will swallow the original trace
+                    ((or (:wrap opts) wrap-fn) form)
+                    opts))))
 
 (defn decorate-specs [specs]
   (if-let [k (some #{:reload :reload-all} specs)]
@@ -1151,7 +1164,8 @@
                                                                (ana/load-data-readers))
                                        reader/*alias-map* (ana/get-aliases ana/*cljs-ns*)]
                                (try
-                                 (read request-prompt request-exit)
+                                 (-> (read request-prompt request-exit)
+                                     (storm-utils/tag-form-recursively :clojure.storm/coord))
                                  (catch Throwable e
                                    (throw (ex-info nil {:clojure.error/phase :read-source} e)))))]
                    (or ({request-exit request-exit

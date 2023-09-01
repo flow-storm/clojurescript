@@ -2,7 +2,6 @@
  :deps
  {com.google.javascript/closure-compiler-unshaded {:mvn/version "v20220502"}
   com.cognitect/transit-java {:mvn/version "1.0.362"}
-  org.clojure/clojure {:mvn/version "1.10.0"}
   org.clojure/core.specs.alpha {:mvn/version "0.1.24"}
   org.clojure/google-closure-library {:mvn/version "0.0-20211011-0726fdeb"}
   org.clojure/spec.alpha {:mvn/version "0.1.143"}
@@ -26,4 +25,13 @@
                                       "-m" "cljs.main" "-co" "resources/self_parity_test.edn" "-c"]}
   :uberjar               {:extra-deps {com.github.seancorfield/depstar {:mvn/version "2.0.193"}}
                           :exec-fn hf.depstar/uberjar
-                          :exec-args {:aot true}}}}
+                          :exec-args {:aot true}}
+  :storm {:classpath-overrides {org.clojure/clojure nil}
+          :extra-deps {com.github.jpmonettas/clojure {:mvn/version "1.11.1-8"}
+                       com.github.jpmonettas/flow-storm-dbg {:mvn/version "3.7.1"}}
+          :jvm-opts ["-Dproject-name=CLJSCompiler"
+                     "-Xmx20000m" "-Xms20000m"
+                     "-Dflowstorm.startRecording=false"
+                     "-Dflowstorm.theme=dark"
+                     "-Dclojure.storm.instrumentEnable=true"
+                     "-Dclojure.storm.instrumentOnlyPrefixes=cljs."]}}}
