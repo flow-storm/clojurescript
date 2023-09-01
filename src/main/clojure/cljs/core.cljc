@@ -51,6 +51,7 @@
   (:require clojure.walk
             clojure.set
             [clojure.string :as string]
+            [cljs.storm.utils :as storm-utils]
             [cljs.compiler :as comp]
             [cljs.env :as env]
             #?(:clj [cljs.support :refer [assert-args]])
@@ -60,6 +61,21 @@
 #?(:clj (alias 'core 'clojure.core))
 #?(:clj (alias 'ana 'cljs.analyzer))
 
+(def record-methods-symbols '#{-lookup
+                               -kv-reduce
+                               -pr-writer
+                               -iterator
+                               -meta
+                               -clone
+                               -count
+                               -hash
+                               -equiv
+                               -dissoc
+                               -contains-key?
+                               -assoc
+                               -seq
+                               -with-meta
+                               -conj})
 #?(:clj
    (core/defmacro import-macros [ns [& vars]]
      (core/let [ns (find-ns ns)
@@ -1440,12 +1456,14 @@
   (update-protocol-var p tsym env)
   (core/let [psym       (resolve p)
              pfn-prefix (subs (core/str psym) 0
-                          (clojure.core/inc (.indexOf (core/str psym) "/")))]
+                              (clojure.core/inc (.indexOf (core/str psym) "/")))]
     (cons `(unchecked-set ~psym ~type true)
-      (map (core/fn [[f & meths :as form]]
-             `(unchecked-set ~(symbol (core/str pfn-prefix f))
-                ~type ~(with-meta `(fn ~@meths) (meta form))))
-        sigs))))
+          (map (core/fn [[f & meths :as form]]
+                 (core/let [fq-fn-symb (symbol (core/str pfn-prefix f))
+                            form-meta (assoc (meta form) :cljs.storm/fn-trace-name (name fq-fn-symb))]
+                   `(unchecked-set ~fq-fn-symb
+                                   ~type ~(with-meta `(fn ~@meths) form-meta))))
+           sigs))))
 
 (core/defmulti ^:private extend-prefix (core/fn [tsym sym] (core/-> tsym meta :extend)))
 
@@ -1483,9 +1501,10 @@
   (map (core/fn [[f & meths :as form]]
          (core/let [[f meths] (if (vector? (first meths))
                                 [f [(rest form)]]
-                                [f meths])]
+                                [f meths])
+                    form-meta (assoc (meta form) :cljs.storm/fn-trace-name (name f))]
            `(set! ~(extend-prefix type-sym f)
-              ~(with-meta `(fn ~@(map #(adapt-obj-params type %) meths)) (meta form)))))
+              ~(with-meta `(fn ~@(map #(adapt-obj-params type %) meths)) form-meta))))
     sigs))
 
 (core/defn- ifn-invoke-methods [type type-sym [f & meths :as form]]
@@ -1500,9 +1519,11 @@
   (core/let [meths    (map #(adapt-ifn-params type %) meths)
              this-sym (with-meta 'self__ {:tag type})
              argsym   (gensym "args")
-             max-ifn-arity 20]
+             max-ifn-arity 20             
+             form-meta (assoc (meta form)
+                              :cljs.storm/fn-trace-name (core/name f))]
     (concat
-      [`(set! ~(extend-prefix type-sym 'call) ~(with-meta `(fn ~@meths) (meta form)))
+      [`(set! ~(extend-prefix type-sym 'call) ~(with-meta `(fn ~@meths) form-meta))
        `(set! ~(extend-prefix type-sym 'apply)
           ~(with-meta
              `(fn ~[this-sym argsym]
@@ -1514,19 +1535,24 @@
                           (doto (.slice args# 0 ~max-ifn-arity)
                             (.push (.slice args# ~max-ifn-arity)))
                           args#))))))
-             (meta form)))]
+             form-meta))]
       (ifn-invoke-methods type type-sym form))))
 
 (core/defn- add-proto-methods* [pprefix type type-sym [f & meths :as form]]
-  (core/let [pf (core/str pprefix (munge (name f)))]
+  (core/let [pf (core/str pprefix (munge (name f)))
+             skip-inst? (boolean (record-methods-symbols f))
+             form-meta (assoc (meta form)
+                              :cljs.storm/fn-trace-name (core/str f)
+                              :cljs.storm/skip-expr-instrumentation? skip-inst?
+                              :cljs.storm/skip-fn-trace? skip-inst?)]
     (if (vector? (first meths))
       ;; single method case
       (core/let [meth meths]
         [`(set! ~(extend-prefix type-sym (core/str pf "$arity$" (count (first meth))))
-            ~(with-meta `(fn ~@(adapt-proto-params type meth)) (meta form)))])
+            ~(with-meta `(fn ~@(adapt-proto-params type meth)) form-meta))])
       (map (core/fn [[sig & body :as meth]]
              `(set! ~(extend-prefix type-sym (core/str pf "$arity$" (count sig)))
-                ~(with-meta `(fn ~(adapt-proto-params type meth)) (meta form))))
+                ~(with-meta `(fn ~(adapt-proto-params type meth)) form-meta)))
         meths))))
 
 (core/defn- proto-assign-impls [env resolve type-sym type [p sigs]]
@@ -1659,9 +1685,9 @@
                                    [type base-assign-impls]
                                    [(resolve type-sym) proto-assign-impls])]
     (core/when (core/and (:extending-base-js-type cljs.analyzer/*cljs-warnings*)
-            (js-base-type type-sym))
+                         (js-base-type type-sym))
       (cljs.analyzer/warning :extending-base-js-type env
-        {:current-symbol type-sym :suggested-symbol (js-base-type type-sym)}))
+                             {:current-symbol type-sym :suggested-symbol (js-base-type type-sym)}))    
     `(do ~@(mapcat #(assign-impls env resolve type-sym type %) impl-map))))
 
 (core/defn- prepare-protocol-masks [env impls]
@@ -1688,8 +1714,9 @@
 
 (core/defn- annotate-specs [annots v [f sigs]]
   (conj v
-    (vary-meta (cons f (map #(cons (second %) (nnext %)) sigs))
-      merge annots)))
+        (vary-meta (cons f (map #(cons (second %) (nnext %)) sigs))
+                   merge
+                   annots)))
 
 (core/defn dt->et
   ([type specs fields]
@@ -1720,7 +1747,7 @@
                        (assoc (meta rsym) :factory :positional))
              docstring (core/str "Positional factory function for " rname ".")
         field-values (if (core/-> rsym meta :internal-ctor) (conj fields nil nil nil) fields)]
-    `(defn ~fn-name
+    `(defn ~(storm-utils/disable-instrumentation fn-name)
        ~docstring
        [~@fields]
        (new ~rname ~@field-values))))
@@ -1789,15 +1816,19 @@
              protocols (collect-protocols impls env)
              t (vary-meta t assoc
                  :protocols protocols
-                 :skip-protocol-flag fpps) ]
+                 :skip-protocol-flag fpps)
+             basis-fn-form (storm-utils/disable-instrumentation
+                            `(fn [] '[~@fields]))
+             ctor-pr-writer-fn-form (storm-utils/disable-instrumentation
+                                     `(fn [this# writer# opt#] (-write writer# ~(core/str r))))]
     `(do
        (deftype* ~t ~fields ~pmasks
          ~(if (seq impls)
             `(extend-type ~t ~@(dt->et t impls fields))))
-       (set! (.-getBasis ~t) (fn [] '[~@fields]))
+       (set! (.-getBasis ~t) ~basis-fn-form)
        (set! (.-cljs$lang$type ~t) true)
        (set! (.-cljs$lang$ctorStr ~t) ~(core/str r))
-       (set! (.-cljs$lang$ctorPrWriter ~t) (fn [this# writer# opt#] (-write writer# ~(core/str r))))
+       (set! (.-cljs$lang$ctorPrWriter ~t) ~ctor-pr-writer-fn-form)
 
        ~(build-positional-factory t r fields)
        ~t)))
@@ -1817,14 +1848,14 @@
     (core/let [gs (gensym)
                ksym (gensym "k")
                impls (concat
-                       impls
+                      impls
                        ['IRecord
                         'ICloneable
                         `(~'-clone [this#] (new ~tagname ~@fields))
                         'IHash
                         `(~'-hash [this#]
                            (caching-hash this#
-                             (fn [coll#]
+                             (fn ~(storm-utils/disable-instrumentation '-hash-caching-hash) [coll#]
                                (bit-xor
                                  ~(hash (core/-> rname comp/munge core/str))
                                  (hash-unordered-coll coll#)))
@@ -1891,14 +1922,15 @@
 
                         'IPrintWithWriter
                         `(~'-pr-writer [this# writer# opts#]
-                           (let [pr-pair# (fn [keyval#] (pr-sequential-writer writer# (~'js* "cljs.core.pr_writer") "" " " "" opts# keyval#))]
+                          (let [pr-pair# (fn ~(storm-utils/disable-instrumentation '-pr-writer-pr-pair) [keyval#]
+                                           (pr-sequential-writer writer# (~'js* "cljs.core.pr_writer") "" " " "" opts# keyval#))]
                              (pr-sequential-writer
                                writer# pr-pair# ~pr-open ", " "}" opts#
                                (concat [~@(map #(core/list `vector (keyword %) %) base-fields)]
                                  ~'__extmap))))
                         'IKVReduce
                         `(~'-kv-reduce [this# f# init#]
-                           (reduce (fn [ret# [k# v#]] (f# ret# k# v#)) init# this#))
+                          (reduce (fn ~(storm-utils/disable-instrumentation '-kv-reduce-reducer) [ret# [k# v#]] (f# ret# k# v#)) init# this#))
                         ])
                [fpps pmasks] (prepare-protocol-masks env impls)
                protocols (collect-protocols impls env)
@@ -1916,7 +1948,7 @@
              ms (gensym)
              ks (map keyword fields)
              getters (map (core/fn [k] `(~k ~ms)) ks)]
-    `(defn ~fn-name ~docstring [~ms]
+    `(defn ~(storm-utils/disable-instrumentation fn-name) ~docstring [~ms]
        (let [extmap# (cond->> (dissoc ~ms ~@ks)
                         (record? ~ms) (into {}))]
          (new ~rname ~@getters nil (not-empty extmap#) nil)))))
@@ -1979,13 +2011,19 @@
   (core/let [rsym (vary-meta rsym assoc :internal-ctor true)
              r    (vary-meta
                     (:name (cljs.analyzer/resolve-var (dissoc &env :locals) rsym))
-                    assoc :internal-ctor true)]
+                    assoc :internal-ctor true)
+             basis-fn-form (storm-utils/disable-instrumentation
+                            `(fn [] '[~@fields]))
+             ctor-pr-seq-fn-form (storm-utils/disable-instrumentation
+                                  `(fn [this#] (cljs.core/list ~(core/str r))))
+             ctor-pr-writer-fn-form (storm-utils/disable-instrumentation
+                                     `(fn [this# writer#] (-write writer# ~(core/str r))))]
     `(let []
        ~(emit-defrecord &env rsym r fields impls)
-       (set! (.-getBasis ~r) (fn [] '[~@fields]))
+       (set! (.-getBasis ~r) ~basis-fn-form)
        (set! (.-cljs$lang$type ~r) true)
-       (set! (.-cljs$lang$ctorPrSeq ~r) (fn [this#] (cljs.core/list ~(core/str r))))
-       (set! (.-cljs$lang$ctorPrWriter ~r) (fn [this# writer#] (-write writer# ~(core/str r))))
+       (set! (.-cljs$lang$ctorPrSeq ~r) ~ctor-pr-seq-fn-form)
+       (set! (.-cljs$lang$ctorPrWriter ~r) ~ctor-pr-writer-fn-form)
        ~(build-positional-factory rsym r fields)
        ~(build-map-factory rsym r fields)
        ~r)))
@@ -2158,18 +2196,21 @@
                                  dyn-name (symbol (core/str slot "$dyn"))
                                  fname (vary-meta fname assoc
                                          :protocol p
-                                         :doc doc)]
-                        `(let [~dyn-name (core/fn
-                                           ~@(map (core/fn [sig]
-                                                    (expand-dyn fname sig))
-                                               sigs))]
-                           (defn ~fname
+                                         :doc doc)]                        
+                        `(let [~dyn-name
+                               ~(storm-utils/disable-instrumentation
+                                 `(core/fn
+                                  ~@(map (core/fn [sig]
+                                           (expand-dyn fname sig))
+                                         sigs)))]
+                           
+                           (defn ~(storm-utils/disable-instrumentation fname)
                              ~@(map (core/fn [sig]
                                       (expand-sig fname dyn-name
-                                        (with-meta (symbol (core/str slot "$arity$" (count sig)))
-                                          {:protocol-prop true})
-                                        sig))
-                                 sigs)))))]
+                                                  (with-meta (symbol (core/str slot "$arity$" (count sig)))
+                                                    {:protocol-prop true})
+                                                  sig))
+                                    sigs)))))]
     `(do
        (set! ~'*unchecked-if* true)
        (def ~psym (~'js* "function(){}"))
@@ -2772,7 +2813,7 @@
              options     (if (map? (first options))
                            (next options)
                            options)
-             dispatch-fn (first options)
+             dispatch-fn (storm-utils/merge-meta (first options) {:cljs.storm/fn-trace-name (core/str (name mm-name) "-dispatch")})
              options     (next options)
              m           (if docstring
                            (assoc m :doc docstring)
@@ -2800,7 +2841,9 @@
 (core/defmacro defmethod
   "Creates and installs a new method of multimethod associated with dispatch-value. "
   [multifn dispatch-val & fn-tail]
-  `(-add-method ~(with-meta multifn {:tag 'cljs.core/MultiFn}) ~dispatch-val (fn ~@fn-tail)))
+  (let [trace-name (name multifn)
+        fn-form (storm-utils/merge-meta `(fn ~@fn-tail) {:cljs.storm/fn-trace-name trace-name})]
+    `(-add-method ~(with-meta multifn {:tag 'cljs.core/MultiFn}) ~dispatch-val ~fn-form)))
 
 (core/defmacro time
   "Evaluates expr and prints the time it took. Returns the value of expr."
@@ -3145,7 +3188,8 @@
                             (. self# (~(get-delegate) (seq ~restarg))))))))]
        `(do
           (set! (. ~sym ~(get-delegate-prop))
-            (fn (~(vec sig) ~@body)))
+                ~(storm-utils/merge-meta `(fn (~(vec sig) ~@body))
+                   {:cljs.storm/fn-trace-name (core/name sym)}))
           ~@(core/when solo
               `[(set! (. ~sym ~'-cljs$lang$maxFixedArity)
                   ~(core/dec (count sig)))])
@@ -3187,7 +3231,7 @@
                         :arglists-meta (doall (map meta [arglist]))})
                name  (with-meta name meta)]
       `(do
-         (def ~name
+         (def ~(storm-utils/disable-instrumentation name)
            (fn [~'var_args]
              (let [args# (array)]
                (copy-arguments args#)
@@ -3220,13 +3264,14 @@
                  (if (some '#{&} sig)
                    (variadic-fn* name method false)
                    ;; fix up individual :fn-method meta for
-                   ;; cljs.analyzer/parse 'set! :top-fn handling
-                   `(set!
+                   ;; cljs.analyzer/parse 'set! :top-fn handling                   
+                   (let [fn-form (storm-utils/merge-meta `(fn ~method) {:cljs.storm/fn-trace-name (core/str name)})]
+                    `(set!
                       (. ~(vary-meta name update :top-fn merge
-                            {:variadic? false :fixed-arity (count sig)})
-                        ~(symbol (core/str "-cljs$core$IFn$_invoke$arity$"
-                                   (count sig))))
-                      (fn ~method))))]
+                                     {:variadic? false :fixed-arity (count sig)})
+                         ~(symbol (core/str "-cljs$core$IFn$_invoke$arity$"
+                                            (count sig))))
+                      ~fn-form))))]
     (core/let [rname    (symbol (core/str ana/*cljs-ns*) (core/str name))
                arglists (map first fdecl)
                macro?   (:macro meta)
@@ -3263,6 +3308,7 @@
         (ana/warning :overload-arity {} {:name name}))
       `(do
          (def ~name
+           ^:cljs.storm/skip-fn-trace?
            (fn [~'var_args]
              (case (alength (js-arguments))
                ~@(mapcat #(fixed-arity rname %) sigs)

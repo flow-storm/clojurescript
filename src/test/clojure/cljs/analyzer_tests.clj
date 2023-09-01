@@ -757,10 +757,14 @@
   (is (= :do (-> (ana (defrecord Ab [] Object (toString [this] "a"))) :body :statements first :ret :body :op)))
   ;fn
   (is (= :fn (-> (ana (fn [])) :op)))
-  (is (= [:methods] (-> (ana (fn [])) :children)))
+  ;; [STORM] disabling this test since doesn't make sense on storm,
+  ;; since we are automatically naming all annon fns with fn-(gensym)
+  ;; (is (= [:methods] (-> (ana (fn [])) :children)))
   (is (= [:local :methods] (-> (ana (fn a [])) :children)))
-  ;   :local
-  (is (-> (ana (fn [])) (contains? :local) false?))
+                                        ;   :local
+  ;; [STORM] disabling this test since doesn't make sense on storm,
+  ;; since we are automatically naming all annon fns with fn-(gensym)
+  ;; (is (-> (ana (fn [])) (contains? :local) false?))
   (is (=
        [:binding 'b :fn]
        (-> (ana (fn b [& a]))

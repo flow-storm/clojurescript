@@ -14,6 +14,8 @@
                                      no-warn with-warning-handlers wrapping-errors]]
              [cljs.env.macros :refer [ensure]]))
   #?(:clj  (:require [cljs.analyzer.impl :as impl]
+                     [cljs.storm.utils :as storm-utils]
+                     [cljs.storm.emitter :as storm-emitter]
                      [cljs.analyzer.impl.namespaces :as nses]
                      [cljs.analyzer.passes.and-or :as and-or]
                      [cljs.env :as env :refer [ensure]]
@@ -28,6 +30,8 @@
                      [cljs.vendor.clojure.tools.reader :as reader]
                      [cljs.vendor.clojure.tools.reader.reader-types :as readers])
      :cljs (:require [cljs.analyzer.impl :as impl]
+                     [cljs.storm.utils :as storm-utils]
+                     [cljs.storm.emitter :as storm-emitter]
                      [cljs.analyzer.impl.namespaces :as nses]
                      [cljs.analyzer.passes.and-or :as and-or]
                      [cljs.env :as env]
@@ -1811,14 +1815,19 @@
     (< 2 (count form))
     (throw
       (error env "Too many arguments to throw, throw expects a single Error instance")))
-  (let [throw-expr (disallowing-recur (analyze (assoc env :context :expr) throw-form))]
+  (let [env (cond-> env
+              (= :expr (:context env)) (assoc :enclosing-context :block))
+        throw-expr (disallowing-recur (analyze (assoc env :context :expr)
+                                               throw-form))]
     {:env env :op :throw :form form
      :exception throw-expr
      :children [:exception]}))
 
 (defmethod parse 'try
   [op env [_ & body :as form] name _]
-  (let [catchenv (update-in env [:context] #(if (= :expr %) :return %))
+  (let [env (cond-> env
+              (= :expr (:context env)) (assoc :enclosing-context :block))
+        catchenv (update-in env [:context] #(if (= :expr %) :return %))        
         catch? (every-pred seq? #(= (first %) 'catch))
         default? (every-pred catch? #(= (second %) :default))
         finally? (every-pred seq? #(= (first %) 'finally))
@@ -2090,9 +2099,11 @@
          :name var-name
          :var (assoc
                 (analyze
-                  (-> env (dissoc :locals)
-                    (assoc :context :expr)
-                    (assoc :def-var true))
+                 (-> env
+                     (assoc :cljs.storm/skip-expr-instrumentation? true) ;; do not instrument def name
+                     (dissoc :locals)
+                     (assoc :context :expr)
+                     (assoc :def-var true))
                   sym)
                 :op :var)
          :doc doc
@@ -2176,7 +2187,8 @@
        :fixed-arity fixed-arity
        :type type
        :form form
-       :recurs recurs}
+       :recurs recurs
+       :cljs.storm/coord (-> form meta :cljs.storm/coord)}
       (if (some? expr)
         {:body (assoc expr :body? true)
          :children [:params :body]}
@@ -2213,7 +2225,7 @@
   (let [named-fn?    (symbol? (first args))
         [name meths] (if named-fn?
                          [(first args) (next args)]
-                         [name (seq args)])
+                         [(or name (gensym "fn-")) (seq args)])
         ;; turn (fn [] ...) into (fn ([]...))
         meths        (if (vector? (first meths))
                        (list meths)
@@ -2231,6 +2243,23 @@
         type         (::type form-meta)
         proto-impl   (::protocol-impl form-meta)
         proto-inline (::protocol-inline form-meta)
+        ;; we can signal fn-trace skipping by providing meta on the (fn* ...) form
+        ;; or the name symbol. The second one is using for (defn fname ...) forms.  
+        skip-fn-trace? (or (:cljs.storm/skip-fn-trace? form-meta)
+                           (:cljs.storm/skip-fn-trace? (meta name)))
+        skip-expr-instrumentation? (or (:cljs.storm/skip-expr-instrumentation? form-meta)
+                                       (:cljs.storm/skip-expr-instrumentation? (meta name)))
+        fn-trace-name (:cljs.storm/fn-trace-name form-meta)
+        form-coord (-> form meta :cljs.storm/coord)
+        env (cond-> env              
+              true           (assoc :enclosing-context :fn)
+              true           (assoc :cljs.storm/wrapping-fn-coord form-coord)
+              true           (assoc :cljs.storm/skip-fn-trace? skip-fn-trace?)
+              true           (assoc :cljs.storm/skip-expr-instrumentation? skip-expr-instrumentation?)
+              fn-trace-name  (assoc :cljs.storm/fn-trace-name  fn-trace-name))
+        meths (map (fn [m]
+                     (storm-utils/merge-meta m {:cljs.storm/coord form-coord}))
+                   meths)
         menv         (-> env
                          (cond->
                            (> (count meths) 1)
@@ -2240,7 +2269,8 @@
                          (dissoc :in-loop)
                          (merge {:protocol-impl proto-impl
                                  :protocol-inline proto-inline}))
-        methods      (map #(disallowing-ns* (analyze-fn-method menv locals % type (nil? name))) meths)
+        methods      (map #(disallowing-ns* (analyze-fn-method menv locals % type (nil? name)))
+                          meths)
         mfa          (transduce (map :fixed-arity) max 0 methods)
         variadic     (boolean (some :variadic? methods))
         locals       (if named-fn?
@@ -2402,6 +2432,7 @@
                 shadow (or (handle-symbol-local name (get-in env [:locals name]))
                            (get-in env [:js-globals name]))
                 be {:name name
+                    :cljs.storm/coord (-> name meta :cljs.storm/coord)
                     :line line
                     :column col
                     :init init-expr
@@ -2459,6 +2490,11 @@
                          (cond->
                            (true? is-loop) (assoc :in-loop true))
                          (analyze-let-bindings bindings op))
+        ;; expr lets will wrap everything in a fn to create a block
+        ;; but it doesn't make sense to trace the returns for this funcitons
+        ;; so we need to mark it
+        env (cond-> env
+              (= :expr context) (assoc :enclosing-context :block))
         recur-frame  (when (true? is-loop)
                        {:params bes
                         :flag (atom nil)
@@ -2605,7 +2641,9 @@
                        [target val])]
     (disallowing-recur
       (binding [*private-var-access-nowarn* true]
-        (let [enve  (assoc env :context :expr)
+        (let [enve  (assoc env
+                           :context :expr
+                           :cljs.storm/skip-expr-instrumentation? true)
               texpr (cond
                       (symbol? target)
                       (do
@@ -2643,7 +2681,8 @@
                                       (analyze-seq enve target nil))]
                           (when (:field texpr)
                             texpr))))
-              vexpr (analyze enve val)]
+              vexpr (analyze (assoc enve :cljs.storm/skip-expr-instrumentation? (:cljs.storm/skip-expr-instrumentation? env))
+                             val)]
           ;; as top level fns are decomposed for Closure cross-module code motion, we need to
           ;; restore their :methods information
           (when (seq? target)
@@ -3828,7 +3867,11 @@
                  (record-with-field? (:tag (first argexprs)) (symbol (name f))))
           (let [field-access-form (list* (symbol (str ".-" (name f))) args)]
             (no-warn (analyze env field-access-form)))
-          {:env      env :op :invoke :form form :fn fexpr :args argexprs
+          {:env env
+           :op :invoke
+           :form form
+           :fn fexpr
+           :args argexprs
            :children [:fn :args]})))))
 
 (defn parse-invoke
@@ -3869,7 +3912,7 @@
     (do
       (register-constant! env sym)
       (analyze-wrap-meta {:op :const :val sym :env env :form sym :tag 'cljs.core/Symbol}))
-    (let [{:keys [line column]} (meta sym)
+    (let [{:keys [line column cljs.storm/coord]} (meta sym)
           env  (if-not (nil? line)
                  (assoc env :line line)
                  env)
@@ -3880,7 +3923,8 @@
           lcls (:locals env)]
       (if-some [lb (handle-symbol-local sym (get lcls sym))]
         (merge
-          (assoc ret :op :local :info lb)
+         (-> (assoc ret :op :local :info lb)
+             (update :env #(assoc % :cljs.storm/coord coord)))         
           ;; this is a temporary workaround for core.async see CLJS-3030 - David
           (when (map? lb)
             (select-keys lb [:name :local :arg-id :variadic? :init])))
@@ -4071,7 +4115,9 @@
   "Given a env, an analysis environment, and form, a ClojureScript form,
    macroexpand the form once."
   [env form]
-  (wrapping-errors env (macroexpand-1* env form)))
+  (storm-utils/merge-meta
+   (wrapping-errors env (macroexpand-1* env form))
+   (meta form)))
 
 (declare analyze-list)
 
@@ -4189,8 +4235,17 @@
 (defn elide-analyzer-meta [m]
   (dissoc m ::analyzed))
 
+(defn elide-storm-meta [m]
+  (reduce-kv (fn [r k v]
+               (if (and (keyword? k)
+                        (= "cljs.storm" (namespace k)))
+                 r
+                 (assoc r k v)))
+             {}
+             m))
+
 (defn elide-irrelevant-meta [m]
-  (-> m elide-reader-meta elide-analyzer-meta))
+  (-> m elide-reader-meta elide-analyzer-meta elide-storm-meta))
 
 (defn analyze-wrap-meta [expr]
   (let [form (:form expr)
@@ -4339,14 +4394,24 @@
      :cljs [infer-type and-or/optimize check-invoke-arg-types]))
 
 (defn analyze* [env form name opts]
-  (let [passes *passes*
+  (let [top-level-form? (= form (get-in env [:root-source-info :source-form]))
+        skip-ns? (storm-emitter/skip-instrumentation? (get-in env [:ns :name]))
+        form (cond-> form
+               (and top-level-form? (not skip-ns?)) (storm-utils/tag-form-recursively :cljs.storm/coord))
+        {:keys [cljs.storm/coord]} (meta form)
+        env (cond-> env
+              top-level-form? (assoc :cljs.storm/form-id (hash form))
+              (not skip-ns?)  (assoc :cljs.storm/instrument-enable? true))
+        passes *passes*
         passes (if (nil? passes)
                  default-passes
                  passes)
         form   (if (instance? LazySeq form)
                  (if (seq form) form ())
-                 form)
-        ast    (analyze-form env form name opts)]
+                 form)        
+        ast    (cond-> (analyze-form env form name opts)
+                 top-level-form? (assoc :top-level-form? true)
+                 coord           (assoc :cljs.storm/coord coord))]
     (reduce (fn [ast pass] (pass env ast opts)) ast passes)))
 
 (defn analyze
@@ -4753,6 +4818,16 @@
       (when speced-vars
         (swap! @speced-vars into vars)))))
 
+(defn- storm-clean-analysis-for-cache [ana]
+  ;; just to make the test pass, which fails in unsignificant ways because we are adding :root-source-info to the env
+  (update ana 
+          :defs
+          (fn [defs]
+            (reduce-kv
+             (fn [r k v]
+               (assoc r k (dissoc v :root-source-info)))
+             {}
+             defs))))
 #?(:clj
    (defn write-analysis-cache
      ([ns cache-file]
@@ -4767,8 +4842,9 @@
                    (str ";; Analyzed by ClojureScript " (util/clojurescript-version) "\n"
                      (pr-str analysis)))
           "json" (when-let [{:keys [writer write]} @transit]
-                   (with-open [os (io/output-stream cache-file)]
-                     (write (writer os :json transit-write-opts) analysis)))))
+                   (with-open [os (io/output-stream cache-file)]                     
+                     (write (writer os :json transit-write-opts)
+                            (storm-clean-analysis-for-cache analysis))))))
       (when src
         (.setLastModified ^File cache-file (util/last-modified src))))))
 

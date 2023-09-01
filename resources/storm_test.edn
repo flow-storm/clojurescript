@@ -1,0 +1,11 @@
+{:optimizations :none #_:advanced
+ :main storm-test-runner
+ :output-to "builds/out-adv/storm-advanced-test.js"
+ :output-dir "builds/out-adv"
+ :output-wrapper true
+ :verbose true
+ :compiler-stats true
+ :target :nodejs
+ :preloads [cljs.storm.tracer]
+ :closure-warnings {:non-standard-jsdoc :off :global-this :off}
+ :language-out :es5}
