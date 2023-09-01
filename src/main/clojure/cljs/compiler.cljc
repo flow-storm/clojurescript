@@ -21,7 +21,8 @@
                     [clojure.java.io :as io]
                     [clojure.set :as set]
                     [clojure.string :as string]
-                    [cljs.vendor.clojure.tools.reader :as reader])
+                    [cljs.vendor.clojure.tools.reader :as reader]
+                    [clojure.string :as str])
      :cljs (:require [cljs.analyzer :as ana]
                      [cljs.analyzer.impl :as ana.impl]
                      [cljs.env :as env]
@@ -182,6 +183,11 @@
 
 (defmulti emit* :op)
 
+(declare emits)
+(declare emit-list)
+(declare emit-constants-comma-sep)
+(declare emitln)
+
 (defn emit [ast]
   (when *source-map-data*
     (let [{:keys [env]} ast]
@@ -201,8 +207,28 @@
                   (fnil (fn [line]
                           (update-in line [(if column (dec column) 0)]
                             (fnil (fn [column] (conj column minfo)) [])))
-                    (sorted-map))))))))))
-  (emit* ast))
+                        (sorted-map))))))))))
+  
+  (emit* ast)
+  
+  ;; emit the register for after the thing (ast), so the
+  ;; return of ast expr is returned in the repl
+  (let [{:keys [form env top-level-form?]} ast
+        {:keys [root-source-info :cljs.storm/form-id :cljs.storm/instrument-enable?]} env
+        form-ns (str (get-in ast [:env :ns :name]))]
+    (when (and instrument-enable?
+               form-id
+               top-level-form?
+               (seq? form)
+               (not (#{'ns 'in-ns 'require 'load 'load-file} (first form))))
+      (let [orig-form (get root-source-info :source-form)]
+        (emits "\n; cljs.storm.tracer.register_form("
+               form-id
+               ",\""
+               form-ns
+               "\",")        
+        (emit-list orig-form emit-constants-comma-sep)
+        (emitln ");")))))
 
 (defn emits
   ([])
@@ -447,7 +473,41 @@
    (defmacro emit-wrap [env & body]
      `(let [env# ~env]
         (when (= :return (:context env#)) (emits "return "))
-        ~@body
+        (if (and (:cljs.storm/instrument-enable? env#)
+                 (or (= :return  (:context env#))
+                     (and (#{:statement :expr} (:context env#))
+                          (:cljs.storm/coord env#))))
+          (let [coord# (str/join "," (or (:cljs.storm/coord env#)
+                                         (:cljs.storm/wrapping-fn-coord env#)))
+                form-id# (:cljs.storm/form-id env#)]
+            
+            (case (:context env#)
+              :return (if (:cljs.storm/skip-fn-trace? env#)                        
+                        (do ~@body)
+                        
+                        (do 
+                          (emits (if (= :fn (:enclosing-context env#))
+                                   ;; when returning from a fn block trace it like a fn return
+                                   "cljs.storm.tracer.trace_fn_return( "
+                                   
+                                   ;; else, if we are emitting a return but not on a function
+                                   ;; (could be let or loop) trace it like a expression
+                                   "cljs.storm.tracer.trace_expr( "))
+                          ~@body
+                          (emits ",\"" coord# "\"," form-id# ")"  )))
+              (:expr :statement) (if (:cljs.storm/skip-expr-instrumentation?  env#)
+                                   (do ~@body)
+                                   
+                                   ;; now if it is an :expr let's check env meta before instrumenting
+                                   ;; since we don't want to trace everything like keywords, vectors, etc
+                                   (do
+                                     (emits "cljs.storm.tracer.trace_expr( ")                           
+                                     ~@body
+                                     (emits ",\"" coord# "\"," form-id# ")"  )))  ))
+
+          ;; if instrumentation isn't enable or we don't have a coord
+          ;; just don't instrument anything
+          (do ~@body))
         (when-not (= :expr (:context env#)) (emitln ";")))))
 
 (defmethod emit* :no-op [m])
@@ -480,7 +540,9 @@
                 js-module (get-in cenv [:js-namespaces (or (namespace var-name) (name var-name))])
                 info (cond-> info
                        (not= form 'js/-Infinity) (munge reserved))]
-            (emit-wrap env
+            (emit-wrap (cond-> env
+                         (some-> ast :info :fn-var) (assoc :cljs.storm/skip-expr-instrumentation? true)
+                         (:cljs.storm/coord ast)    (assoc :cljs.storm/coord (:cljs.storm/coord ast)))
               (case (:module-type js-module)
                 ;; Closure exports CJS exports through default property
                 :commonjs
@@ -502,10 +564,11 @@
 (defmethod emit* :local [expr] (emit-var expr))
 
 (defmethod emit* :the-var
-  [{:keys [env var sym meta] :as arg}]
+  [{:keys [env var sym meta cljs.storm/coord] :as arg}]
   {:pre [(ana/ast? sym) (ana/ast? meta)]}
   (let [{:keys [name]} (:info var)]
-    (emit-wrap env
+    (emit-wrap (cond-> env                        
+                 coord (assoc :cljs.storm/coord coord))
       (emits "new cljs.core.Var(function(){return " (munge name) ";},"
         sym "," meta ")"))))
 
@@ -513,8 +576,9 @@
   (emits "cljs.core.with_meta(" expr "," meta ")"))
 
 (defmethod emit* :with-meta
-  [{:keys [expr meta env]}]
-  (emit-wrap env
+  [{:keys [expr meta env cljs.storm/coord]}]
+  (emit-wrap (cond-> env                        
+               coord (assoc :cljs.storm/coord coord))
     (emit-with-meta expr meta)))
 
 (defn distinct-keys? [keys]
@@ -545,7 +609,7 @@
 
 (defmethod emit* :map
   [{:keys [env keys vals]}]
-  (emit-wrap env
+  (emit-wrap (assoc env :cljs.storm/skip-expr-instrumentation? true)
     (emit-map keys vals comma-sep distinct-keys?)))
 
 (defn emit-list [items comma-sep]
@@ -564,7 +628,7 @@
 
 (defmethod emit* :vector
   [{:keys [items env]}]
-  (emit-wrap env
+  (emit-wrap (assoc env :cljs.storm/skip-expr-instrumentation? true)
     (emit-vector items comma-sep)))
 
 (defn distinct-constants? [items]
@@ -585,7 +649,7 @@
 
 (defmethod emit* :set
   [{:keys [items env]}]
-  (emit-wrap env
+  (emit-wrap (assoc env :cljs.storm/skip-expr-instrumentation? true)
     (emit-set items comma-sep distinct-constants?)))
 
 (defn emit-js-object [items emit-js-object-val]
@@ -602,12 +666,12 @@
 
 (defmethod emit* :js-object
   [{:keys [keys vals env]}]
-  (emit-wrap env
+  (emit-wrap (assoc env :cljs.storm/skip-expr-instrumentation? true)
     (emit-js-object (map vector keys vals) identity)))
 
 (defmethod emit* :js-array
   [{:keys [items env]}]
-  (emit-wrap env
+  (emit-wrap (assoc env :cljs.storm/skip-expr-instrumentation? true)
     (emit-js-array items comma-sep)))
 
 (defn emit-record-value
@@ -621,7 +685,8 @@
 (defmethod emit* :const
   [{:keys [form env]}]
   (when-not (= :statement (:context env))
-    (emit-wrap env (emit-constant form))))
+    (emit-wrap (assoc env :cljs.storm/skip-expr-instrumentation? true)
+     (emit-constant form))))
 
 (defn truthy-constant? [expr]
   (let [{:keys [op form const-expr]} (ana/unwrap-quote expr)]
@@ -670,7 +735,7 @@
     (emitln "switch (" v ") {")
     (doseq [{ts :tests {:keys [then]} :then} nodes]
       (doseq [test (map :test ts)]
-        (emitln "case " test ":"))
+        (emitln "case " (assoc-in test [:env :cljs.storm/skip-expr-instrumentation?] true) ":"))
       (if (= :expr (:context env))
         (emitln gs "=" then)
         (emitln then))
@@ -893,20 +958,52 @@
     (when-not (= param (last params))
       (emits ","))))
 
+(defn storm-emit-binding-trace [env binding let-coord]
+  (when (and (:cljs.storm/instrument-enable? env)
+             (not (:cljs.storm/skip-fn-trace? env))
+             (not (= (:name binding) '_))
+             (not (str/includes? (str (:name binding)) "__")))
+    
+    (emitln "cljs.storm.tracer.trace_bind("
+            (assoc-in binding [:env :cljs.storm/skip-expr-instrumentation?] true)
+            ",\""
+            (str/join "," let-coord)                
+            "\",\""
+            (:name binding)
+            "\");")))
+
 (defn emit-fn-method
-  [{expr :body :keys [type name params env recurs]}]
-  (emit-wrap env
-    (emits "(function " (munge name) "(")
-    (emit-fn-params params)
-    (emitln "){")
-    (when type
-      (emitln "var self__ = this;"))
-    (when recurs (emitln "while(true){"))
-    (emits expr)
-    (when recurs
-      (emitln "break;")
-      (emitln "}"))
-    (emits "})")))
+  [{expr :body :keys [type name params env recurs cljs.storm/coord]}]
+  
+  (let [{:keys [cljs.storm/skip-fn-trace? cljs.storm/fn-trace-name cljs.storm/instrument-enable?]} env]
+    (emit-wrap (assoc env :cljs.storm/coord coord) 
+              (emits "(function " (munge name) "(")
+              (emit-fn-params params)
+              (emitln "){")
+              
+              (when (and instrument-enable? (not skip-fn-trace?))
+                (let [form-id (:cljs.storm/form-id env)
+                      fn-trace-name (or fn-trace-name (str (:name name)))]
+                  (emits "cljs.storm.tracer.trace_fn_call(arguments,\""
+                         (str (get-in env [:ns :name]))
+                         "\",\""
+                         fn-trace-name                          
+                         "\","
+                         form-id))
+                (emitln ");")
+                (emits ))
+
+              (doseq [param-binding params]
+                (storm-emit-binding-trace env param-binding coord))
+              
+              (when type
+                (emitln "var self__ = this;"))
+              (when recurs (emitln "while(true){"))
+              (emits expr)
+              (when recurs
+                (emitln "break;")
+                (emitln "}"))
+              (emits "})"))))
 
 (defn emit-arguments-to-array
   "Emit code that copies function arguments into an array starting at an index.
@@ -1083,7 +1180,7 @@
       (emits try))))
 
 (defn emit-let
-  [{expr :body :keys [bindings env]} is-loop]
+  [{expr :body :keys [bindings env cljs.storm/coord]} is-loop]
   (let [context (:context env)]
     (when (= :expr context) (emits "(function (){"))
     (binding [*lexical-renames*
@@ -1098,9 +1195,18 @@
       (doseq [{:keys [init] :as binding} bindings]
         (emits "var ")
         (emit binding) ; Binding will be treated as a var
-        (emitln " = " init ";"))
-      (when is-loop (emitln "while(true){"))
-      (emits expr)
+        (emitln " = " init ";")
+
+        (storm-emit-binding-trace env binding coord))
+      
+      (when is-loop
+        (emitln "while(true){")
+        
+        (doseq [binding bindings]  ;; this is to refresh bindings values on each iteration
+          (storm-emit-binding-trace env binding coord)))
+      
+      (emits (cond-> expr
+               (= :expr context) (assoc-in [:ret :env :cljs.storm/skip-fn-trace?] true)))
       (when is-loop
         (emitln "break;")
         (emitln "}")))
@@ -1138,7 +1244,7 @@
             "$")))
 
 (defmethod emit* :invoke
-  [{f :fn :keys [args env] :as expr}]
+  [{f :fn :keys [args env cljs.storm/coord] :as expr}]
   (let [info (:info f)
         fn? (and ana/*cljs-static-fns*
                  (not (:dynamic info))
@@ -1216,7 +1322,7 @@
                           #(-> % (dissoc :shadow) (dissoc :fn-self-name)))))) nil]
                  [f nil]))))
           [f nil])]
-    (emit-wrap env
+    (emit-wrap (assoc env :cljs.storm/coord coord)
       (cond
        opt-not?
        (emits "(!(" (first args) "))")
@@ -1254,15 +1360,22 @@
          (emits f ".call(" (comma-sep (cons "null" args)) ")"))))))
 
 (defmethod emit* :new
-  [{ctor :class :keys [args env]}]
-  (emit-wrap env
-             (emits "(new " ctor "("
+  [{ctor :class :keys [args env cljs.storm/coord]}]
+  (emit-wrap (assoc env :cljs.storm/coord coord)
+             (emits "(new "
+                    (assoc-in ctor [:env :cljs.storm/skip-expr-instrumentation?] true)
+                    "("
                     (comma-sep args)
                     "))")))
 
 (defmethod emit* :set!
-  [{:keys [target val env]}]
-  (emit-wrap env (emits "(" target " = " val ")")))
+  [{:keys [target val env cljs.storm/coord]}]  
+  (emit-wrap (assoc env :cljs.storm/coord coord)
+             (emits "("
+                    target
+                    " = "
+                    val
+                    ")")))
 
 (defn sublib-select
   [sublib]
@@ -1421,8 +1534,8 @@
     (emit body)))
 
 (defn emit-dot
-  [{:keys [target field method args env]}]
-  (emit-wrap env
+  [{:keys [target field method args env cljs.storm/coord]}]
+  (emit-wrap (assoc env :cljs.storm/coord coord)
     (if field
       (emits target "." (munge field #{}))
       (emits target "." (munge method #{}) "("
@@ -1433,11 +1546,11 @@
 (defmethod emit* :host-call [ast] (emit-dot ast))
 
 (defmethod emit* :js
-  [{:keys [op env code segs args]}]
+  [{:keys [op env code segs args cljs.storm/coord]}]
   (if (and code #?(:clj  (.startsWith ^String (string/trim code) "/*")
                    :cljs (gstring/startsWith (string/trim code) "/*")))
     (emits code)
-    (emit-wrap env
+    (emit-wrap (assoc env :cljs.storm/coord coord)
       (if code
         (emits code)
         (emits (interleave (concat segs (repeat nil))
@@ -1581,13 +1694,17 @@
                     ns-name     nil
                     deps        []]
                (if (seq forms)
-                 (let [env (assoc env :ns (ana/get-namespace ana/*cljs-ns*))
-                       {:keys [op] :as ast} (ana/analyze env (first forms) nil opts)]
+                 (let [form (first forms)
+                       env (assoc env
+                                  :ns (ana/get-namespace ana/*cljs-ns*)
+                                  :root-source-info {:source-type :fragment
+                                                     :source-form form})
+                       {:keys [op] :as ast} (ana/analyze env form nil opts)]
                    (cond
                      (= op :ns)
                      (let [ns-name (:name ast)
                            ns-name (if (and (= 'cljs.core ns-name)
-                                         (= "cljc" ext))
+                                            (= "cljc" ext))
                                      'cljs.core$macros
                                      ns-name)]
                        (emit ast)
