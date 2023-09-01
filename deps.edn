@@ -2,7 +2,6 @@
  :deps
  {com.google.javascript/closure-compiler {:mvn/version "v20250820"}
   com.cognitect/transit-java {:mvn/version "1.0.362"}
-  org.clojure/clojure {:mvn/version "1.10.0"}
   org.clojure/core.specs.alpha {:mvn/version "0.1.24"}
   org.clojure/google-closure-library {:mvn/version "0.0-20250515-f04e4c0e"}
   org.clojure/spec.alpha {:mvn/version "0.1.143"}
@@ -25,14 +24,38 @@
                                       "-e" "(cljs.test-runner/-main)"]}
   :runtime.test.build    {:extra-paths ["src/test/cljs"]
                           :main-opts ["-m" "cljs.main" "-co" "resources/test.edn" "-c"]}
+
   :lite.test.build       {:extra-paths ["src/test/cljs"]
                           :main-opts ["-m" "cljs.main" "-co" "resources/lite_test.edn" "-c"]}
+
+
+  :runtime.storm.test.build {:extra-paths ["src/test/cljs"]
+                             :jvm-opts ["-Dcljs.storm.instrumentOnlyPrefixes=cljs.storm.tests-code"
+                                        "-Dcljs.storm.instrumentEnable=true"]
+                             :main-opts ["-m" "cljs.main" "-co" "resources/storm_test.edn" "-c"]}
+
   :selfhost.test.build   {:extra-paths ["src/test/self"]
                           :main-opts ["-m" "cljs.main" "-co" "resources/self_host_test.edn" "-c"]}
   :selfparity.test.build {:extra-paths ["src/test/self"]
                           :main-opts ["-i" "src/test/self/self_parity/setup.clj"
                                       "-e" "(self-parity.setup/-main)"
                                       "-m" "cljs.main" "-co" "resources/self_parity_test.edn" "-c"]}
+  :shadow-test-storm {:extra-paths ["src/test/cljs"]
+                      :jvm-opts ["-Dcljs.storm.instrumentOnlyPrefixes=cljs.storm.tests-code"
+                                 "-Dcljs.storm.instrumentEnable=true"]
+                      :classpath-overrides {org.clojure/clojurescript nil}
+                      :extra-deps {thheller/shadow-cljs {:mvn/version "2.25.6"
+                                                         :exclusions [org.clojure/clojurescript]}
+                                   com.github.jpmonettas/clojurescript {:local/root "./"}}}
   :uberjar               {:extra-deps {com.github.seancorfield/depstar {:mvn/version "2.0.193"}}
                           :exec-fn hf.depstar/uberjar
-                          :exec-args {:aot true}}}}
+                          :exec-args {:aot true}}
+  :storm {:classpath-overrides {org.clojure/clojure nil}
+          :extra-deps {com.github.jpmonettas/clojure {:mvn/version "1.11.1-8"}
+                       com.github.jpmonettas/flow-storm-dbg {:mvn/version "3.7.1"}}
+          :jvm-opts ["-Dproject-name=CLJSCompiler"
+                     "-Xmx20000m" "-Xms20000m"
+                     "-Dflowstorm.startRecording=false"
+                     "-Dflowstorm.theme=dark"
+                     "-Dclojure.storm.instrumentEnable=true"
+                     "-Dclojure.storm.instrumentOnlyPrefixes=cljs."]}}}

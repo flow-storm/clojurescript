@@ -7,7 +7,8 @@
 ;;  You must not remove this notice, or any other, from this software.
 
 (ns clojure.browser.repl.preload
-  (:require [clojure.browser.repl :as repl]))
+  (:require [clojure.browser.repl :as repl]
+            [cljs.storm.tracer]))
 
 (defonce conn
   (repl/connect (str "http://" repl/HOST ":" repl/PORT "/repl")))

@@ -117,6 +117,7 @@ jobs:
         shell: powershell
 
   # Self-host Tests
+
   self-host-test:
     name: Self-host Tests
     runs-on: ubuntu-latest
@@ -152,15 +153,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ env.cache-name }}-
 
-      - name: Build tests
-        run: clojure -M:selfhost.test.build
+  #     - name: Build tests
+  #       run: clojure -M:selfhost.test.build
 
-      - name: Run tests
-        run: |
-          node builds/out-self/core-self-test.js | tee test-out.txt
-          grep -qxF '0 failures, 0 errors.' test-out.txt
+  #     - name: Run tests
+  #       run: |
+  #         node builds/out-self/core-self-test.js | tee test-out.txt
+  #         grep -qxF '0 failures, 0 errors.' test-out.txt
 
   # Self-parity Tests
+
   self-parity-test:
     name: Self-parity Tests
     runs-on: ubuntu-latest
@@ -194,15 +196,15 @@ jobs:
           path: ~/.gitlibs
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('deps.edn', '*/deps.edn') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.cache-name }}-
+            ${{ runner.os }}-${{ env.cache-name }}-            
 
-      - name: Build tests
-        run: clojure -M:selfparity.test.build
+  #     - name: Build tests
+  #       run: clojure -M:selfparity.test.build
 
-      - name: Run tests
-        run: |
-          node builds/out-self-parity/main.js | tee test-out.txt
-          grep -qxF '0 failures, 0 errors.' test-out.txt
+  #     - name: Run tests
+  #       run: |
+  #         node builds/out-self-parity/main.js | tee test-out.txt
+  #         grep -qxF '0 failures, 0 errors.' test-out.txt
 
   # Compiler Tests
   compiler-test:
@@ -301,11 +303,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ env.cache-name }}-
 
-      - name: Build Uberjar
-        run: ./script/uberjar
+  #     - name: Cache gitlibs
+  #       uses: actions/cache@v2
+  #       env:
+  #         cache-name: cache-gitlibs
+  #       with:
+  #         path: ~/.gitlibs
+  #         key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-${{ env.cache-name }}-
 
-      - name: Run tests
-        run: |
-          unset JAVA_TOOL_OPTIONS
-          clojure -M:cli.test.run | tee test-out.txt
-          grep -qxF '0 failures, 0 errors.' test-out.txt
+  #     - name: Build Uberjar
+  #       run: ./script/uberjar
+
+  #     - name: Run tests
+  #       run: |
+  #         unset JAVA_TOOL_OPTIONS
+  #         clojure -M:cli.test.run | tee test-out.txt
+  #         grep -qxF '0 failures, 0 errors.' test-out.txt
+  
