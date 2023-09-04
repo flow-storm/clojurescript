@@ -4343,14 +4343,23 @@
      :cljs [infer-type and-or/optimize check-invoke-arg-types]))
 
 (defn analyze* [env form name opts]
-  (let [passes *passes*
+  (let [top-level-form? (= form (get-in env [:root-source-info :source-form]))
+        inst-ns? (= "dev" (str (get-in env [:ns :name])))
+        form (cond-> form
+               (and top-level-form? inst-ns?) (storm-utils/tag-form-recursively :clojure.storm/coord))
+        env (cond-> env
+              (and top-level-form?
+                   inst-ns?)
+              (assoc :clojure.storm/form-id (hash form)))
+        passes *passes*
         passes (if (nil? passes)
                  default-passes
                  passes)
         form   (if (instance? LazySeq form)
                  (if (seq form) form ())
-                 form)
-        ast    (analyze-form env form name opts)]
+                 form)        
+        ast    (cond-> (analyze-form env form name opts)
+                 top-level-form? (assoc :top-level-form? true))]
     (reduce (fn [ast pass] (pass env ast opts)) ast passes)))
 
 (defn analyze

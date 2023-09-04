@@ -182,6 +182,10 @@
 
 (defmulti emit* :op)
 
+(declare emits)
+(declare emit-list)
+(declare emit-constants-comma-sep)
+
 (defn emit [ast]
   (when *source-map-data*
     (let [{:keys [env]} ast]
@@ -201,7 +205,25 @@
                   (fnil (fn [line]
                           (update-in line [(if column (dec column) 0)]
                             (fnil (fn [column] (conj column minfo)) [])))
-                    (sorted-map))))))))))
+                        (sorted-map))))))))))
+  (let [form (:form ast)
+        form-id (get-in ast [:env :clojure.storm/form-id]) 
+        form-ns (str (get-in ast [:env :ns :name]))
+        top-level-form? (get ast :top-level-form?)]
+    (when (and form-id
+               top-level-form?
+               (seq? form)
+               (not (#{'ns 'in-ns 'require 'load 'load-file} (first form))))
+      (let [orig-form (get-in ast [:env :root-source-info :source-form])]
+        (emits "cljs.storm.tracer.register_form("
+               form-id
+               ",\""
+               form-ns
+               "\",")
+        (emit-list orig-form emit-constants-comma-sep)
+        (emits ");"))
+      
+      ))
   (emit* ast))
 
 (defn emits
@@ -447,9 +469,9 @@
    (defmacro emit-wrap [env & body]
      `(let [env# ~env]
         (when (= :return (:context env#)) (emits "return "))
-        (if (and (:clojure.storm/coord env#)
-                 (#{:return :expr} (:context env#))
-                 (= "dev" (str (get-in env# [:ns :name]))))
+        (if (and (:clojure.storm/form-id env#)
+                 (:clojure.storm/coord env#)
+                 (#{:return :expr} (:context env#)))
           (let [coord# (str/join "," (:clojure.storm/coord env#))
                 form-id# (:clojure.storm/form-id env#)]
             (emits (case (:context env#)
@@ -909,13 +931,13 @@
              (emits "(function " (munge name) "(")
              (emit-fn-params params)
              (emitln "){")
-             (when (= 'dev (get-in env [:ns :name]))
+             (when-let [form-id (get env :clojure.storm/form-id)]
                (emits "cljs.storm.tracer.trace_fn_call(arguments,\""             
                       (str (:name name))
                       "\",\""
                       (str (get-in env [:ns :name]))
                       "\","
-                      (get env :clojure.storm/form-id)
+                      form-id
                       ");")
                (emits ))
              (when type
