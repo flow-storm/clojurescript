@@ -185,6 +185,7 @@
 (declare emits)
 (declare emit-list)
 (declare emit-constants-comma-sep)
+(declare emitln)
 
 (defn emit [ast]
   (when *source-map-data*
@@ -207,7 +208,7 @@
                             (fnil (fn [column] (conj column minfo)) [])))
                         (sorted-map))))))))))
   (let [form (:form ast)
-        form-id (get-in ast [:env :clojure.storm/form-id]) 
+        form-id (get-in ast [:env :cljs.storm/form-id]) 
         form-ns (str (get-in ast [:env :ns :name]))
         top-level-form? (get ast :top-level-form?)]
     (when (and form-id
@@ -219,9 +220,9 @@
                form-id
                ",\""
                form-ns
-               "\",")
+               "\",")        
         (emit-list orig-form emit-constants-comma-sep)
-        (emits ");"))
+        (emitln ");"))
       
       ))
   (emit* ast))
@@ -469,11 +470,11 @@
    (defmacro emit-wrap [env & body]
      `(let [env# ~env]
         (when (= :return (:context env#)) (emits "return "))
-        (if (and (:clojure.storm/form-id env#)
-                 (:clojure.storm/coord env#)
+         (if (and (:cljs.storm/form-id env#)
+                 (:cljs.storm/coord env#)
                  (#{:return :expr} (:context env#)))
-          (let [coord# (str/join "," (:clojure.storm/coord env#))
-                form-id# (:clojure.storm/form-id env#)]
+          (let [coord# (str/join "," (:cljs.storm/coord env#))
+                form-id# (:cljs.storm/form-id env#)]
             (emits (case (:context env#)
                      :return "cljs.storm.tracer.trace_fn_return( "
                      :expr   "cljs.storm.tracer.trace_expr( "))
@@ -931,14 +932,14 @@
              (emits "(function " (munge name) "(")
              (emit-fn-params params)
              (emitln "){")
-             (when-let [form-id (get env :clojure.storm/form-id)]
+             (when-let [form-id (get env :cljs.storm/form-id)]
                (emits "cljs.storm.tracer.trace_fn_call(arguments,\""             
-                      (str (:name name))
-                      "\",\""
                       (str (get-in env [:ns :name]))
+                      "\",\""
+                      (str (:name name))
                       "\","
-                      form-id
-                      ");")
+                      form-id)
+               (emitln ");")
                (emits ))
              (when type
                (emitln "var self__ = this;"))

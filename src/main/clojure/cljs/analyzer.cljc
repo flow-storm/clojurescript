@@ -15,6 +15,7 @@
              [cljs.env.macros :refer [ensure]]))
   #?(:clj  (:require [cljs.analyzer.impl :as impl]
                      [cljs.storm.utils :as storm-utils]
+                     [cljs.storm.emitter :as storm-emitter]
                      [cljs.analyzer.impl.namespaces :as nses]
                      [cljs.analyzer.passes.and-or :as and-or]
                      [cljs.env :as env :refer [ensure]]
@@ -30,6 +31,7 @@
                      [cljs.vendor.clojure.tools.reader.reader-types :as readers])
      :cljs (:require [cljs.analyzer.impl :as impl]
                      [cljs.storm.utils :as storm-utils]
+                     [cljs.storm.emitter :as storm-emitter]
                      [cljs.analyzer.impl.namespaces :as nses]
                      [cljs.analyzer.passes.and-or :as and-or]
                      [cljs.env :as env]
@@ -3681,7 +3683,7 @@
     (when (true? numeric)
       (validate :invalid-arithmetic #(every? numeric-type? %)))
     {:op :js
-     :env (assoc env :clojure.storm/coord (:clojure.storm/coord form-meta))
+     :env (assoc env :cljs.storm/coord (:cljs.storm/coord form-meta))
      :segs segs
      :args argexprs
      :tag tag
@@ -4191,7 +4193,7 @@
   (dissoc m :file :line :column :end-column :end-line :source))
 
 (defn elide-analyzer-meta [m]
-  (dissoc m ::analyzed))
+  (dissoc m ::analyzed :cljs.storm/coord))
 
 (defn elide-irrelevant-meta [m]
   (-> m elide-reader-meta elide-analyzer-meta))
@@ -4344,13 +4346,13 @@
 
 (defn analyze* [env form name opts]
   (let [top-level-form? (= form (get-in env [:root-source-info :source-form]))
-        inst-ns? (= "dev" (str (get-in env [:ns :name])))
+        skip-ns? (storm-emitter/skip-instrumentation? (get-in env [:ns :name]))
         form (cond-> form
-               (and top-level-form? inst-ns?) (storm-utils/tag-form-recursively :clojure.storm/coord))
+               (and top-level-form? (not skip-ns?)) (storm-utils/tag-form-recursively :cljs.storm/coord))
         env (cond-> env
               (and top-level-form?
-                   inst-ns?)
-              (assoc :clojure.storm/form-id (hash form)))
+                   (not skip-ns?))
+              (assoc :cljs.storm/form-id (hash form)))
         passes *passes*
         passes (if (nil? passes)
                  default-passes
