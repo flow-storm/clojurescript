@@ -39,4 +39,5 @@
                      :form form
                      :file nil
                      :line nil}]
-      (trace-form-init-fn form-data))))
+      (trace-form-init-fn form-data)))
+  nil)

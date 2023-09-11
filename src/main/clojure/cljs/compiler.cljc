@@ -470,16 +470,27 @@
    (defmacro emit-wrap [env & body]
      `(let [env# ~env]
         (when (= :return (:context env#)) (emits "return "))
-         (if (and (:cljs.storm/form-id env#)
+        (if (and (:cljs.storm/form-id env#)
                  (:cljs.storm/coord env#)
-                 (#{:return :expr} (:context env#)))
+                 (#{:return :expr} (:context env#)))           
           (let [coord# (str/join "," (:cljs.storm/coord env#))
                 form-id# (:cljs.storm/form-id env#)]
-            (emits (case (:context env#)
-                     :return "cljs.storm.tracer.trace_fn_return( "
-                     :expr   "cljs.storm.tracer.trace_expr( "))
-            ~@body
-            (emits ",\"" coord# "\"," form-id# ")"  ))
+            
+            (case (:context env#)
+              :return (do ;; if we are instrumenting, always instrument returns
+                        (emits "cljs.storm.tracer.trace_fn_return( ")
+                        ~@body
+                        (emits ",\"" coord# "\"," form-id# ")"  ))
+              :expr   (if (:cljs.storm/skip-instrumentation?  env#)
+                        (do ~@body)
+                        ;; now if it is an :expr let's check env meta before instrumenting
+                        ;; since we don't want to trace everything like keywords, vectors, etc
+                        (do
+                          (emits "cljs.storm.tracer.trace_expr( ")                           
+                          ~@body
+                          (emits ",\"" coord# "\"," form-id# ")"  )))  ))
+
+          ;; if we don't have form-id or coord just don't instrument anything
           (do ~@body))
         (when-not (= :expr (:context env#)) (emitln ";")))))
 
@@ -513,7 +524,8 @@
                 js-module (get-in cenv [:js-namespaces (or (namespace var-name) (name var-name))])
                 info (cond-> info
                        (not= form 'js/-Infinity) (munge reserved))]
-            (emit-wrap env
+            (emit-wrap (cond-> env
+                         (some-> ast :info :fn-var) (assoc :cljs.storm/skip-instrumentation? true))
               (case (:module-type js-module)
                 ;; Closure exports CJS exports through default property
                 :commonjs
@@ -578,7 +590,7 @@
 
 (defmethod emit* :map
   [{:keys [env keys vals]}]
-  (emit-wrap env
+  (emit-wrap (assoc env :cljs.storm/skip-instrumentation? true)
     (emit-map keys vals comma-sep distinct-keys?)))
 
 (defn emit-list [items comma-sep]
@@ -597,7 +609,7 @@
 
 (defmethod emit* :vector
   [{:keys [items env]}]
-  (emit-wrap env
+  (emit-wrap (assoc env :cljs.storm/skip-instrumentation? true)
     (emit-vector items comma-sep)))
 
 (defn distinct-constants? [items]
@@ -618,7 +630,7 @@
 
 (defmethod emit* :set
   [{:keys [items env]}]
-  (emit-wrap env
+  (emit-wrap (assoc env :cljs.storm/skip-instrumentation? true)
     (emit-set items comma-sep distinct-constants?)))
 
 (defn emit-js-object [items emit-js-object-val]
@@ -654,7 +666,8 @@
 (defmethod emit* :const
   [{:keys [form env]}]
   (when-not (= :statement (:context env))
-    (emit-wrap env (emit-constant form))))
+    (emit-wrap (assoc env :cljs.storm/skip-instrumentation? true)
+     (emit-constant form))))
 
 (defn truthy-constant? [expr]
   (let [{:keys [op form const-expr]} (ana/unwrap-quote expr)]
@@ -1303,8 +1316,13 @@
                     "))")))
 
 (defmethod emit* :set!
-  [{:keys [target val env]}]
-  (emit-wrap env (emits "(" target " = " val ")")))
+  [{:keys [target val env]}]  
+  (emit-wrap env
+             (emits "("
+                    (update target :env dissoc :cljs.storm/form-id)
+                    " = "
+                    val
+                    ")")))
 
 (defn sublib-select
   [sublib]
@@ -1623,13 +1641,17 @@
                     ns-name     nil
                     deps        []]
                (if (seq forms)
-                 (let [env (assoc env :ns (ana/get-namespace ana/*cljs-ns*))
-                       {:keys [op] :as ast} (ana/analyze env (first forms) nil opts)]
+                 (let [form (first forms)
+                       env (assoc env
+                                  :ns (ana/get-namespace ana/*cljs-ns*)
+                                  :root-source-info {:source-type :fragment
+                                                     :source-form form})
+                       {:keys [op] :as ast} (ana/analyze env form nil opts)]
                    (cond
                      (= op :ns)
                      (let [ns-name (:name ast)
                            ns-name (if (and (= 'cljs.core ns-name)
-                                         (= "cljc" ext))
+                                            (= "cljc" ext))
                                      'cljs.core$macros
                                      ns-name)]
                        (emit ast)

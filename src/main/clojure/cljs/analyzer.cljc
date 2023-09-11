@@ -2167,7 +2167,10 @@
                          :flag          (atom nil)
                          :tags          (atom [])}
         recur-frames    (cons recur-frame *recur-frames*)
-        body-env        (assoc env :context :return :locals locals)
+        body-env        (assoc env
+                               :context :return
+                               :locals locals
+                               :cljs.storm/coord (some-> body first meta :cljs.storm/coord))
         body-form       `(do ~@body)
         expr            (when analyze-body?
                           (analyze-fn-method-body body-env body-form recur-frames))
@@ -3832,7 +3835,11 @@
                  (record-with-field? (:tag (first argexprs)) (symbol (name f))))
           (let [field-access-form (list* (symbol (str ".-" (name f))) args)]
             (no-warn (analyze env field-access-form)))
-          {:env      env :op :invoke :form form :fn fexpr :args argexprs
+          {:env (assoc env :cljs.storm/coord (some-> form meta :cljs.storm/coord))
+           :op :invoke
+           :form form
+           :fn fexpr
+           :args argexprs
            :children [:fn :args]})))))
 
 (defn parse-invoke
@@ -3873,7 +3880,7 @@
     (do
       (register-constant! env sym)
       (analyze-wrap-meta {:op :const :val sym :env env :form sym :tag 'cljs.core/Symbol}))
-    (let [{:keys [line column]} (meta sym)
+    (let [{:keys [line column cljs.storm/coord]} (meta sym)
           env  (if-not (nil? line)
                  (assoc env :line line)
                  env)
@@ -3884,7 +3891,8 @@
           lcls (:locals env)]
       (if-some [lb (handle-symbol-local sym (get lcls sym))]
         (merge
-          (assoc ret :op :local :info lb)
+         (-> (assoc ret :op :local :info lb)
+             (update :env #(assoc % :cljs.storm/coord coord)))         
           ;; this is a temporary workaround for core.async see CLJS-3030 - David
           (when (map? lb)
             (select-keys lb [:name :local :arg-id :variadic? :init])))
