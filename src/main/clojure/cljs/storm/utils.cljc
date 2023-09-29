@@ -1,5 +1,8 @@
 (ns cljs.storm.utils
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [clojure.java.io :as io])
+  #?(:clj (:import [java.nio.file Files]
+                   [java.nio.file.attribute FileTime])))
 
 (defn merge-meta
 
@@ -98,3 +101,14 @@
                       (merge-meta frm {key coor})
                       frm))
                   form))
+
+#?(:clj
+   (defn touch-cljs-files [path]
+     (doseq [f (file-seq (io/file path))]
+       (when (.isFile f)
+         (let [[_ fext] (re-find #".+\.([a-z]+)$" (.getName f))]
+           (when (#{"cljc" "cljs"} fext)
+             (println "Touching " (.getAbsolutePath f))
+             (Files/setLastModifiedTime 
+              (.toPath f) 
+              (FileTime/fromMillis (System/currentTimeMillis)))))))))
