@@ -16,6 +16,7 @@
   #?(:clj  (:require [cljs.analyzer.impl :as impl]
                      [cljs.storm.utils :as storm-utils]
                      [cljs.storm.emitter :as storm-emitter]
+                     [cljs.storm.api]
                      [cljs.analyzer.impl.namespaces :as nses]
                      [cljs.analyzer.passes.and-or :as and-or]
                      [cljs.env :as env :refer [ensure]]
