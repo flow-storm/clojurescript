@@ -136,3 +136,10 @@
             [:expr-exec 2 "3,2,2" -608980379]
             [:fn-return 4 "3,2" -608980379]]
            (u/capture)) "captured traces should match.")))
+
+(deftest js-fn-call-test
+  (let [r (b/js-fn-call)]
+    (is (instance js/Promise r) "function return should be right.")
+    (is (= [[:fn-call "cljs.storm.tests.bodies" "js-fn-call" [] -166767748]
+            [:fn-return "#object[...]" "3" -166767748]]
+           (u/capture)) "captured traces should match.")))

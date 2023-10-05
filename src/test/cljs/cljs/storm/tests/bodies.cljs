@@ -53,3 +53,6 @@
             (:x m)
             0)]
     (+ x x)))
+
+(defn js-fn-call []
+  (js/Promise.resolve))

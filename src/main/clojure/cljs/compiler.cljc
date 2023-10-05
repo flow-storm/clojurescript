@@ -514,7 +514,7 @@
 (defmethod emit* :no-op [m])
 
 (defn emit-var
-  [{:keys [info env form] :as ast}]
+  [{:keys [info env form op] :as ast}]
   (if-let [const-expr (:const-expr ast)]
     (emit (assoc const-expr :env env))
     (let [{:keys [options] :as cenv} @env/*compiler*
@@ -542,7 +542,9 @@
                 info (cond-> info
                        (not= form 'js/-Infinity) (munge reserved))]
             (emit-wrap (cond-> env
-                         (some-> ast :info :fn-var) (assoc :cljs.storm/skip-expr-instrumentation? true))
+                         (or (some-> ast :info :fn-var)
+                             (and (= :js-var op) (-> ast :info :js-fn-var)))
+                         (assoc :cljs.storm/skip-expr-instrumentation? true))
               (case (:module-type js-module)
                 ;; Closure exports CJS exports through default property
                 :commonjs
