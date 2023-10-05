@@ -47,3 +47,9 @@
 
 (defn interopter [o]
   (+ (.-num o) (.f o 40)))
+
+(defn integration-1 [m]
+  (let [x (if (contains? m :x)
+            (:x m)
+            0)]
+    (+ x x)))

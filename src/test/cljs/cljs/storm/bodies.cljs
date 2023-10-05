@@ -121,3 +121,18 @@
             [:expr-exec 40 "3,2" 919708180]
             [:fn-return 42 "3" 919708180]]
            (u/capture)) "captured traces should match.")))
+
+(deftest integration-1-test
+  (let [r (b/integration-1  {:x 2})]
+    (is (= 4 r) "function return should be right.")
+    (is (= [[:fn-call "cljs.storm.tests.bodies" "integration-1" [{:x 2}] -608980379]
+            [:bind "m" {:x 2} ""]
+            [:expr-exec {:x 2} "3,1,1,1,1" -608980379]
+            [:expr-exec true "3,1,1,1" -608980379]
+            [:expr-exec {:x 2} "3,1,1,2,1" -608980379]
+            [:expr-exec 2 "3,1,1,2" -608980379]
+            [:bind "x" 2 "3"]
+            [:expr-exec 2 "3,2,1" -608980379]
+            [:expr-exec 2 "3,2,2" -608980379]
+            [:fn-return 4 "3,2" -608980379]]
+           (u/capture)) "captured traces should match.")))
