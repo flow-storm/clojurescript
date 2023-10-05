@@ -16,7 +16,7 @@
            (u/capture)) "captured traces should match.")))
 
 (deftest deftype-test
-  (let [r (ts/area (ts/->Circle 2 5))]
+  (let [r (ts/area (ts/->Circle 2))]
     (is (= 12.56 r) "function return should be right.")
     (is (= [[:fn-call "cljs.storm.tests.types" "area" ["#object[...]"] -1182932616]
             [:expr-exec 2 "4,2,2" -1182932616]
