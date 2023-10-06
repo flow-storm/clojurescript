@@ -1,4 +1,4 @@
-(ns cljs.storm.tests.types)
+(ns cljs.storm.tests-code.types)
 
 (defprotocol ShapeP
   (area [_])

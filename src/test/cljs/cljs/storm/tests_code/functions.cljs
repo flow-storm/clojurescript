@@ -1,4 +1,4 @@
-(ns cljs.storm.tests.functions)
+(ns cljs.storm.tests-code.functions)
 
 (defn empty-body [a b])
 
