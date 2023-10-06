@@ -1,4 +1,4 @@
-(ns cljs.storm.tests.bodies)
+(ns cljs.storm.tests-code.bodies)
 
 (defn tried []
   (try
@@ -56,3 +56,7 @@
 
 (defn js-fn-call []
   (js/Promise.resolve))
+
+(defn clj-fn-call [m]
+  (merge (assoc-in m [:a :b] 42)
+         (assoc m [:c] 42)))
