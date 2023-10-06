@@ -207,28 +207,58 @@
                           (update-in line [(if column (dec column) 0)]
                             (fnil (fn [column] (conj column minfo)) [])))
                         (sorted-map))))))))))
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; STORM Important !!!!
+  ;; Only manipulate the emit env at this level, we need to be careful
+  ;; because [emit* :var], [emit* :binding], etc are all replaced by
+  ;; shadow-cljs with it's own version, so it will work in cljs.main but will fail
+  ;; in shadow
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   
-  (emit* (cond-> ast
-           (:cljs.storm/coord ast) (assoc-in [:env :cljs.storm/coord] (:cljs.storm/coord ast))))
-  
-  ;; emit the register form after the thing (ast), so the
-  ;; return of ast expr is returned in the repl
   (let [{:keys [form env top-level-form?]} ast
         {:keys [root-source-info :cljs.storm/form-id :cljs.storm/instrument-enable?]} env
-        form-ns (str (get-in ast [:env :ns :name]))]
-    (when (and instrument-enable?
-               form-id
-               top-level-form?
-               (seq? form)
-               (not (#{'ns 'in-ns 'require 'load 'load-file} (first form))))
-      (let [orig-form (get root-source-info :source-form)]
-        (emits "\n; cljs.storm.tracer.register_form("
-               form-id
-               ",\""
-               form-ns
-               "\",")        
-        (emit-list orig-form emit-constants-comma-sep)
-        (emitln ");")))))
+        form-ns (str (get-in ast [:env :ns :name]))
+        ast' (cond-> ast
+               (:cljs.storm/coord ast)
+               (assoc-in [:env :cljs.storm/coord] (:cljs.storm/coord ast))
+
+               (and (= :invoke (:op ast))
+                    (#{:js-var :var} (-> ast :fn :op)))
+               (assoc-in [:fn :env :cljs.storm/skip-expr-instrumentation?] true)
+               
+               (or (= :js-var (:op ast))              
+                   (-> ast :info :fn-var))
+               (assoc-in [:env :cljs.storm/skip-expr-instrumentation?] true))
+        emit-register-form (fn []
+                             (let [orig-form (get root-source-info :source-form)]
+                               (emits "\n; cljs.storm.tracer.register_form("
+                                      form-id
+                                      ",\""
+                                      form-ns
+                                      "\",")        
+                               (emit-list orig-form emit-constants-comma-sep)
+                               (emitln ");")))]
+    
+    (if (and instrument-enable?
+             form-id
+             top-level-form?
+             (seq? form)
+             (not (#{'ns 'in-ns 'require 'load 'load-file} (first form))))
+
+      ;; This is as hacky as it gets, but if we are in a shadow repl
+      ;; we need to emit the register-form before to not break it because
+      ;; it will return the last one as the repl result.
+      ;; Now if we are in a cljs.main repl, it will be the other way around.    
+      (if (:shadow.build.compiler/repl-context env)        
+        (do
+          (emit-register-form)
+          (emit* ast'))
+        (do
+          (emit* ast')
+          (emit-register-form)))
+      
+      ;; else, just emit the ast
+      (emit* ast'))))
 
 (defn emits
   ([])
@@ -540,10 +570,7 @@
                 js-module (get-in cenv [:js-namespaces (or (namespace var-name) (name var-name))])
                 info (cond-> info
                        (not= form 'js/-Infinity) (munge reserved))]
-            (emit-wrap (cond-> env
-                         (or (some-> ast :info :fn-var)
-                             (and (= :js-var op) (-> ast :info :js-fn-var)))
-                         (assoc :cljs.storm/skip-expr-instrumentation? true))
+            (emit-wrap env
               (case (:module-type js-module)
                 ;; Closure exports CJS exports through default property
                 :commonjs
