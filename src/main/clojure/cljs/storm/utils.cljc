@@ -1,6 +1,6 @@
 (ns cljs.storm.utils
-  (:require [clojure.string :as str]
-            [clojure.java.io :as io])
+  (:require [clojure.string :as str])
+  #?(:clj (:require [clojure.java.io :as io]))
   #?(:clj (:import [java.nio.file Files]
                    [java.nio.file.attribute FileTime])))
 
