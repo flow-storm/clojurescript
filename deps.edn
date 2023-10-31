@@ -19,7 +19,7 @@
                           :main-opts ["-m" "cljs.main" "-co" "resources/test.edn" "-c"]}
 
   :runtime.storm.test.build {:extra-paths ["src/test/cljs"]
-                             :jvm-opts ["-Dcljs.storm.instrumentOnlyPrefixes=cljs.storm.tests"
+                             :jvm-opts ["-Dcljs.storm.instrumentOnlyPrefixes=cljs.storm.tests-code"
                                         "-Dcljs.storm.instrumentEnable=true"]
                              :main-opts ["-m" "cljs.main" "-co" "resources/storm_test.edn" "-c"]}
 
@@ -29,6 +29,13 @@
                           :main-opts ["-i" "src/test/self/self_parity/setup.clj"
                                       "-e" "(self-parity.setup/-main)"
                                       "-m" "cljs.main" "-co" "resources/self_parity_test.edn" "-c"]}
+  :shadow-test-storm {:extra-paths ["src/test/cljs"]
+                      :jvm-opts ["-Dcljs.storm.instrumentOnlyPrefixes=cljs.storm.tests-code"
+                                 "-Dcljs.storm.instrumentEnable=true"]
+                      :classpath-overrides {org.clojure/clojurescript nil}
+                      :extra-deps {thheller/shadow-cljs {:mvn/version "2.25.6"
+                                                         :exclusions [org.clojure/clojurescript]}
+                                   com.github.jpmonettas/clojurescript {:local/root "./"}}}
   :uberjar               {:extra-deps {com.github.seancorfield/depstar {:mvn/version "2.0.193"}}
                           :exec-fn hf.depstar/uberjar
                           :exec-args {:aot true}}

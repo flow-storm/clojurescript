@@ -1,87 +1,91 @@
-## What is ClojureScript? ##
+# ClojureScriptStorm
 
-[ClojureScript](https://clojurescript.org) is a compiler for [Clojure](https://clojure.org) that targets JavaScript. It is designed to emit JavaScript code which is compatible with the advanced compilation mode of the [Google Closure](https://developers.google.com/closure/compiler/) optimizing compiler.
+## Intro
+Welcome to the ClojureScriptStorm repository. ClojureScriptStorm is a fork of the [official ClojureScript
+compiler](https://github.com/clojure/clojurescript), with some extra code added to make it a dev compiler. 
+This means a compiler with some extra capabilities tailored for development.
 
-Official web site: https://clojurescript.org
+ClojureScriptStorm will add instrumentation (extra javascript) to trace everything that is happening as your programs
+execute. You use it by providing a bunch of callbacks that ClojureScriptStorm will call as code runs.
 
-## Releases and dependency information ##
+## Starting a repl with ClojureStorm
 
-Latest stable release: 1.11.132
-
-* [All released versions](https://search.maven.org/#search%7Cgav%7C1%7Cg%3A%22org.clojure%22%20AND%20a%3A%22clojurescript%22)
-
-[Clojure deps.edn](http://clojure.org/guides/deps_and_cli) dependency information:
-
- ```
- org.clojure/clojurescript {:mvn/version "1.11.132"}
- ```
-
-[Leiningen](https://github.com/technomancy/leiningen/) dependency information:
-
-```
-[org.clojure/clojurescript "1.11.132"]
+```bash
+clj -J-Dcljs.storm.instrumentOnlyPrefixes=dev -J-Dcljs.storm.instrumentEnable=true -Sdeps '{:paths ["src"] :deps {com.github.flow-storm/clojurescript {:mvn/version "RELEASE"}}}' -M -m cljs.main --repl
 ```
 
-[Maven](https://maven.apache.org) dependency information:
+The important bits here are :
+
+- add the ClojureScriptStorm dependency
+- tell ClojureScriptStorm what namespaces to instrument via `instrumentOnlyPrefixes` in this case `dev`
+
+## Hooking into ClojureStorm
+
+```clojure
+(set! cljs.storm.tracer/trace-fn-call-fn
+      (fn [_ fn-ns fn-name fn-args-vec form-id]
+        (prn "fn-call " fn-ns fn-name fn-args-vec form-id)))
+(set! cljs.storm.tracer/trace-fn-return-fn
+      (fn [_ ret coord form-id]
+        (prn "fn-return" ret coord form-id)))
+(set! cljs.storm.tracer/trace-expr-fn
+      (fn [_ val coord form-id]
+        (prn "expr" val coord form-id)))
+(set! cljs.storm.tracer/trace-bind-fn
+      (fn [_ coord sym-name bind-val]
+        (prn "bind" coord sym-name bind-val)))
+(set! cljs.storm.tracer/trace-form-init-fn
+      (fn [form-data]
+        (prn "form-data" form-data)))
+```
+
+Once that is set, you could try something like this :
+
+```clojure
+user=> (ns dev)
+...
+dev=> (defn sum [a b] (+ a b))
+
+"form-data" {:form-id -133716645, :ns "dev", :form (defn sum [a b] (+ a b)), :file nil, :line nil}
+
+dev=> (sum 4 5)
+
+"fn-call " "dev" "sum" #js {"0" 4, "1" 5} -133716645
+"bind" "" "a" 4
+"bind" "" "b" 5
+"expr" 4 "3,1" -133716645
+"expr" 5 "3,2" -133716645
+"fn-return" 9 "3" -133716645
+"expr" 9 "" -1067876745
+"form-data" {:form-id -1067876745, :ns "dev", :form (sum 4 5), :file nil, :line nil}
+"expr" "9" "" nil
+9
 
 ```
-<dependency>
-  <groupId>org.clojure</groupId>
-  <artifactId>clojurescript</artifactId>
-  <version>1.11.132</version>
-</dependency>
+
+## Forms and coordinates
+
+The example above  shows your callbacks receiving form ids and coordinates, let's see how you can use them.
+
+The form-id on each fn-call, fn-return and expr corresponds with the data received by on `trace-form-init-fn`.
+This function will be called once, when the form is defined in the runtime.
+
+Coords are strings with the coordinates inside the form tree.
+In the case of our sum form, "2,1" means the third element (the `[a b]` vector), and then the first one `a`. 
+Coordinates also work with unordered literals like sets, and maps with more than 8 keys.
+
+If you want utility funcitons to work with forms and  coordinates take a look at
+[get-form-at-coord](https://github.com/flow-storm/hansel/blob/master/src/hansel/utils.cljc#L74-L78) for example.
+
+## Controlling instrumentation without restarting the repl
+
+You can add/remove instrumentation prefixes without restarting the repl by calling :
+
+```clojure
+(cljs.storm.api/add-instr-prefix "my-app")
+(cljs.storm.api/rm-instr-prefix "my-app")
 ```
 
-## Getting Started ##
+## Applications using ClojureScriptStorm
 
-* Read the [Quick Start](https://clojurescript.org/guides/quick-start) guide.
-* Read the [Documentation](https://clojurescript.org).
-* Try a [tutorial](https://clojurescript.org/guides).
-* [Companies using ClojureScript](https://clojurescript.org/community/companies)
-
-## Questions, Feedback? ##
-
-Please point all of your questions and feedback to the
-[Clojure mailing list](https://groups.google.com/group/clojure). There
-is a community run
-[ClojureScript user mailing list](https://groups.google.com/group/clojurescript) and
-the IRC channel, `#clojurescript` on [freenode.net](https://freenode.net/), is quite active. 
-There is also a community run [Slack channel](https://clojurians.slack.com). The
-Jira bug/feature tracking application is located at
-<https://clojure.atlassian.net/browse/CLJS>. Before submitting issues
-please read the
-[Reporting Issues](https://github.com/clojure/clojurescript/wiki/Reporting-Issues)
-page first.
-
-## Developers Welcome ##
-
-ClojureScript operates under the same license as Clojure. All
-contributors must have a signed CA (Contributor's Agreement) and
-submit their patch via the appropriate channels. If you're interested
-in contributing to the project, please see the
-[contributing](https://clojure.org/dev/contributing) page on
-[clojure.org](https://clojure.org). For more information about working
-on the compiler and testing check the
-[Developer section of the wiki](https://github.com/clojure/clojurescript/wiki/Developers).
-
-YourKit
-----
-
-<img src="https://www.yourkit.com/images/yklogo.png"></img>
-
-YourKit has given an open source license for their profiler, greatly simplifying the profiling of ClojureScript performance.
-
-YourKit supports open source projects with its full-featured Java Profiler.
-YourKit, LLC is the creator of <a href="https://www.yourkit.com/java/profiler/index.jsp">YourKit Java Profiler</a>
-and <a href="https://www.yourkit.com/.net/profiler/index.jsp">YourKit .NET Profiler</a>,
-innovative and intelligent tools for profiling Java and .NET applications.
-
-## License ##
-
-    Copyright (c) Rich Hickey. All rights reserved. The use and
-    distribution terms for this software are covered by the Eclipse
-    Public License 1.0 (https://opensource.org/license/epl-1-0/)
-    which can be found in the file epl-v10.html at the root of this
-    distribution. By using this software in any fashion, you are
-    agreeing to be bound by the terms of this license. You must
-    not remove this notice, or any other, from this software.
+* [FlowStorm debugger](http://www.flow-storm.org)
