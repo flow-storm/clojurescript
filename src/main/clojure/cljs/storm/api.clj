@@ -20,7 +20,7 @@
   When `touch-path` is provided, touches all the cljs and cljc files recusively.
   Useful for making watchers like the shadow-cljs one recompile and reload files."
 
-  ([prefix] (add-instr-prefix prefix nil))
+  ([prefix] (rm-instr-prefix prefix nil))
   ([prefix touch-path]
    (emitter/remove-instrumentation-only-prefix prefix)
    (when touch-path
