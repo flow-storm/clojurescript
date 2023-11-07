@@ -33,19 +33,15 @@
 
 (defn skip-instrumentation? [ns-symb]
   (let [nsname (str ns-symb)
-        prefixes-instrument (if (seq instrument-only-prefixes)
-                              ;; if there are instrument onlys, lets see if any
-                              ;; of them applies for this fq-fn-name
-                              (some (fn [p]
-                                      (str/starts-with? nsname p))
-                                    instrument-only-prefixes)
-
-                              ;; else, if there are skips lets see if we shouldn't skip
-                              ;; this fq-fn-name                            
-                              (not
-                               (some (fn [p]
-                                       (str/starts-with? nsname p))
-                                     instrument-skip-prefixes)))]
+        instrument? false
+        instrument? (reduce (fn [inst? p]
+                              (or inst? (str/starts-with? nsname p)))
+                            instrument?
+                            instrument-only-prefixes)
+        instrument? (reduce (fn [inst? p]
+                              (and inst? (not (str/starts-with? nsname p))))
+                            instrument?
+                            instrument-skip-prefixes)]
     ;; skip iff
-    (not (and instrument-enable
-              prefixes-instrument))))
+    (or (not instrument-enable)
+        (not instrument?))))
