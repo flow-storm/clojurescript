@@ -508,7 +508,8 @@
                      (and (#{:statement :expr} (:context env#))
                           (:cljs.storm/coord env#))))
           (let [coord# (str/join "," (or (:cljs.storm/coord env#)
-                                         (:cljs.storm/wrapping-fn-coord env#)))]
+                                         (:cljs.storm/wrapping-fn-coord env#)))
+                form-id# (:cljs.storm/form-id env#)]
             
             (case (:context env#)
               :return (if (:cljs.storm/skip-fn-trace? env#)                        
@@ -523,7 +524,7 @@
                                    ;; (could be let or loop) trace it like a expression
                                    "cljs.storm.tracer.trace_expr( "))
                           ~@body
-                          (emits ",\"" coord# "\")"  )))
+                          (emits ",\"" coord# "\"," form-id# ")"  )))
               (:expr :statement) (if (:cljs.storm/skip-expr-instrumentation?  env#)
                                    (do ~@body)
                                    
@@ -532,7 +533,7 @@
                                    (do
                                      (emits "cljs.storm.tracer.trace_expr( ")                           
                                      ~@body
-                                     (emits ",\"" coord# "\")"  )))  ))
+                                     (emits ",\"" coord# "\"," form-id# ")"  )))  ))
 
           ;; if instrumentation isn't enable or we don't have a coord
           ;; just don't instrument anything
