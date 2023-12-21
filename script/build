@@ -27,8 +27,7 @@ CLJS_SCRIPT_MVN_OPTS=${CLJS_SCRIPT_MVN_OPTS:-""}
 MAJOR="1"
 MINOR="11"
 REVISION="60"
-PATCH="8"
-
+PATCH="5"
 # Extract the version number from the string.
 # REVISION_REGEX="v[0-9]*\.[0-9]*-([0-9]*)-.*"
 # if [[ $REVISION =~ $REVISION_REGEX ]]
