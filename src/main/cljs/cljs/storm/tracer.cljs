@@ -14,16 +14,16 @@
   (when trace-fn-call-fn
     (trace-fn-call-fn nil fn-ns fn-name fn-args form-id)))
 
-(defn trace-expr [val coord form-id]
+(defn trace-expr [val coord]
   #_(dbg "trace-expr" [val coord form-id])
   (when trace-expr-fn
-    (trace-expr-fn nil val coord form-id))
+    (trace-expr-fn nil val coord 0))
   val)
 
-(defn trace-fn-return [ret-val coord form-id]
+(defn trace-fn-return [ret-val coord]
   #_(dbg "trace-fn-return" [ret-val coord form-id])
   (when trace-fn-return-fn
-    (trace-fn-return-fn nil ret-val coord form-id))
+    (trace-fn-return-fn nil ret-val coord 0))
   ret-val)
 
 (defn trace-bind [val coord sym-name]
