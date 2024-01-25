@@ -21,8 +21,7 @@
                     [clojure.java.io :as io]
                     [clojure.set :as set]
                     [clojure.string :as string]
-                    [cljs.vendor.clojure.tools.reader :as reader]
-                    [clojure.string :as str])
+                    [cljs.vendor.clojure.tools.reader :as reader])
      :cljs (:require [cljs.analyzer :as ana]
                      [cljs.analyzer.impl :as ana.impl]
                      [cljs.env :as env]
@@ -508,8 +507,8 @@
                  (or (= :return  (:context env#))
                      (and (#{:statement :expr} (:context env#))
                           (:cljs.storm/coord env#))))
-          (let [coord# (str/join "," (or (:cljs.storm/coord env#)
-                                         (:cljs.storm/wrapping-fn-coord env#)))
+          (let [coord# (string/join "," (or (:cljs.storm/coord env#)
+                                            (:cljs.storm/wrapping-fn-coord env#)))
                 form-id# (:cljs.storm/form-id env#)]
             
             (case (:context env#)
@@ -989,12 +988,12 @@
   (when (and (:cljs.storm/instrument-enable? env)
              (not (:cljs.storm/skip-fn-trace? env))
              (not (= (:name binding) '_))
-             (not (str/includes? (str (:name binding)) "__")))
+             (not (string/includes? (str (:name binding)) "__")))
     
     (emitln "cljs.storm.tracer.trace_bind("
             (assoc-in binding [:env :cljs.storm/skip-expr-instrumentation?] true)
             ",\""
-            (str/join "," let-coord)                
+            (string/join "," let-coord)                
             "\",\""
             (:name binding)
             "\");")))
