@@ -23,6 +23,19 @@
     (is (=  [[:fn-call "cljs.storm.tests-code.bodies" "uncached-throw" [] 970185633]
              [:expr-exec "#object[...]" "3,1"]
              [:fn-unwind "Dang" ""]]
+            (u/capture)) "captured traces should match.")))
+
+(deftest uncached-throw-inner-test
+  (let [r (try
+            (b/uncached-throw-inner)
+            (catch js/Error e :throwed))]
+    (is (= :throwed r) "function should have throwed")
+    (is (= [[:fn-call "cljs.storm.tests-code.bodies" "uncached-throw-inner" [] -599626572]
+            [:bind "f" "#object[...]" "3"]
+            [:fn-call "cljs.storm.tests-code.bodies" "inner" [] -599626572]
+            [:expr-exec "#object[...]" "3,1,1,3,1"]
+            [:fn-unwind "Dang" "3,1,1"]
+            [:fn-unwind "Dang" ""]]
            (u/capture)) "captured traces should match.")))
 
 (deftest letfn-test

@@ -10,6 +10,11 @@
 (defn uncached-throw []
   (throw (js/Error. "Dang")))
 
+(defn uncached-throw-inner []
+  (let [f (fn inner []
+            (throw (js/Error. "Dang")))]
+    (f)))
+
 (defn letfn-fn []
   (letfn [(square [x]
             (* x x))]
