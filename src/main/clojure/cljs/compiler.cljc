@@ -1001,15 +1001,20 @@
 (defn emit-fn-method
   [{expr :body :keys [type name params env recurs cljs.storm/coord]}]
   
-  (let [{:keys [cljs.storm/skip-fn-trace? cljs.storm/fn-trace-name cljs.storm/instrument-enable?]} env]
+  (let [{:keys [cljs.storm/skip-fn-trace? cljs.storm/fn-trace-name cljs.storm/instrument-enable? cljs.storm/wrapping-fn-coord]} env
+        form-id (:cljs.storm/form-id env)
+        fn-trace-name (or fn-trace-name (str (:name name)))
+        instrument? (and instrument-enable? (not skip-fn-trace?))
+        coord (string/join "," (or coord wrapping-fn-coord))]
     (emit-wrap env 
               (emits "(function " (munge name) "(")
               (emit-fn-params params)
               (emitln "){")
-              
-              (when (and instrument-enable? (not skip-fn-trace?))
-                (let [form-id (:cljs.storm/form-id env)
-                      fn-trace-name (or fn-trace-name (str (:name name)))]
+
+              ;; added by ClojureStorm
+              (when instrument?
+                (emitln "try {")
+                (let []
                   (emits "cljs.storm.tracer.trace_fn_call(arguments,\""
                          (str (get-in env [:ns :name]))
                          "\",\""
@@ -1017,10 +1022,9 @@
                          "\","
                          form-id))
                 (emitln ");")
-                (emits ))
 
-              (doseq [param-binding params]
-                (storm-emit-binding-trace env param-binding coord))
+                (doseq [param-binding params]
+                  (storm-emit-binding-trace env param-binding coord)))
               
               (when type
                 (emitln "var self__ = this;"))
@@ -1029,6 +1033,18 @@
               (when recurs
                 (emitln "break;")
                 (emitln "}"))
+
+              ;; added by ClojureStorm
+              (when instrument?
+                (emitln "} catch (clojure_storm_error) {")
+                (emitln "cljs.storm.tracer.trace_fn_unwind(clojure_storm_error,\""
+                       coord                       
+                       "\","
+                       form-id
+                       ");")
+                (emitln "throw clojure_storm_error;")
+                (emitln "}"))
+              
               (emits "})"))))
 
 (defn emit-arguments-to-array

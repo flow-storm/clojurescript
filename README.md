@@ -28,6 +28,9 @@ The important bits here are :
 (set! cljs.storm.tracer/trace-fn-return-fn
       (fn [_ ret coord form-id]
         (prn "fn-return" ret coord form-id)))
+(set! cljs.storm.tracer/trace-fn-unwind-fn
+      (fn [_ error coord form-id]
+        (prn "fn-unwind" error coord form-id)))
 (set! cljs.storm.tracer/trace-expr-fn
       (fn [_ val coord form-id]
         (prn "expr" val coord form-id)))

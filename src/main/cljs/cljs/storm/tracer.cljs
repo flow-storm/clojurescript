@@ -3,6 +3,7 @@
 (def trace-expr-fn nil)
 (def trace-fn-call-fn nil)
 (def trace-fn-return-fn nil)
+(def trace-fn-unwind-fn nil)
 (def trace-bind-fn nil)
 (def trace-form-init-fn nil)
 
@@ -25,6 +26,11 @@
   (when trace-fn-return-fn
     (trace-fn-return-fn nil ret-val coord form-id))
   ret-val)
+
+(defn trace-fn-unwind [error coord form-id]
+  #_(dbg "trace-fn-unwind" [error coord form-id])
+  (when trace-fn-unwind-fn
+    (trace-fn-unwind-fn nil error coord form-id)))
 
 (defn trace-bind [val coord sym-name]
   #_(dbg "trace-bind" [val coord sym-name])

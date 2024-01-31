@@ -7,6 +7,9 @@
     (catch js/Error e
       (+ 2 2))))
 
+(defn uncached-throw []
+  (throw (js/Error. "Dang")))
+
 (defn letfn-fn []
   (letfn [(square [x]
             (* x x))]

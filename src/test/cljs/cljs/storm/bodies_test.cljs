@@ -15,6 +15,16 @@
             [:fn-return 4 "3,3,3"]]
            (u/capture)) "captured traces should match.")))
 
+(deftest uncached-throw-test
+  (let [r (try
+            (b/uncached-throw)
+            (catch js/Error e :throwed))]
+    (is (= :throwed r) "function should have throwed")
+    (is (=  [[:fn-call "cljs.storm.tests-code.bodies" "uncached-throw" [] 970185633]
+             [:expr-exec "#object[...]" "3,1"]
+             [:fn-unwind "Dang" ""]]
+           (u/capture)) "captured traces should match.")))
+
 (deftest letfn-test
   (let [r (b/letfn-fn)]
     (is (= 5 r) "function return should be right.")

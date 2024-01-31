@@ -26,6 +26,9 @@
 (set! cljs.storm.tracer/trace-fn-return-fn
       (fn [_ ret-val coord _]
         (swap! captured-traces conj [:fn-return (maybe-serialize ret-val) coord])))
+(set! cljs.storm.tracer/trace-fn-unwind-fn
+      (fn [_ error coord _]
+        (swap! captured-traces conj [:fn-unwind (maybe-serialize (.-message error)) coord])))
 
 (defn reset-captured-traces-fixture [f]
   (reset! captured-traces [])
