@@ -231,7 +231,7 @@
                (assoc-in [:env :cljs.storm/skip-expr-instrumentation?] true))
         emit-register-form (fn []
                              (let [orig-form (get root-source-info :source-form)]
-                               (emits "\n; cljs.storm.tracer.register_form("
+                               (emits "\n cljs.storm.tracer.register_form("
                                       form-id
                                       ",\""
                                       form-ns
@@ -246,15 +246,23 @@
              (not (#{'ns 'in-ns 'require 'load 'load-file} (first form))))
 
       ;; This is as hacky as it gets, but if we are in a shadow repl
-      ;; we need to emit the register-form before to not break it because
-      ;; it will return the last one as the repl result.
-      ;; Now if we are in a cljs.main repl, it will be the other way around.    
-      (if (:shadow.build.compiler/repl-context env)        
+      ;; we need to emit the register-form and the instrumented expression
+      ;; wrapped in a function so it can evaluate correcly.
+      ;; Now if we are not in a repl context and we are compiling files we
+      ;; need to emmit unwrapped 
+      
+      (if (:shadow.build.compiler/repl-context env)
+
         (do
+          (emitln "(function(){")
           (emit-register-form)
-          (emit* ast'))
+          (emits "return ")
+          (emit* ast')        
+          (emitln "})()"))
+        
         (do
           (emit* ast')
+          (emits ";")
           (emit-register-form)))
       
       ;; else, just emit the ast
