@@ -16,6 +16,11 @@
                   (str/split #",")))
    :cljs (def instrument-skip-prefixes nil))
 
+#?(:clj (def instrument-skip-regex
+          (when-let [re (System/getProperty "cljs.storm.instrumentSkipRegex")]
+            (re-pattern re)))
+   :cljs (def instrument-skip-regex nil))
+
 #?(:clj (defn set-instrumentation [on?]
           (alter-var-root #'instrument-enable (constantly on?))))
 
@@ -31,6 +36,12 @@
 #?(:clj (defn remove-instrumentation-skip-prefix [p]
           (alter-var-root #'instrument-skip-prefixes (fn [isp] (remove #(= % p) isp)))))
 
+#?(:clj (defn set-instrumentation-skip-regex [re]
+          (alter-var-root #'instrument-skip-regex (constantly (re-pattern re)))))
+
+#?(:clj (defn remove-instrumentation-skip-regex []
+          (alter-var-root #'instrument-skip-regex (constantly nil))))
+
 #?(:clj (defn skip-instrumentation? [ns-symb]
           (let [nsname (str ns-symb)
                 instrument? false
@@ -41,7 +52,10 @@
                 instrument? (reduce (fn [inst? p]
                                       (and inst? (not (str/starts-with? nsname p))))
                                     instrument?
-                                    instrument-skip-prefixes)]
+                                    instrument-skip-prefixes)
+                instrument? (if-not instrument-skip-regex
+                              instrument?
+                              (and instrument? (not (re-find instrument-skip-regex nsname))))]
             ;; skip iff
             (or (not instrument-enable)
                 (not instrument?)))))

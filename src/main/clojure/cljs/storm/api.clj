@@ -50,8 +50,20 @@
    (when touch-path
      (storm-utils/touch-cljs-files touch-path))))
 
+(defn set-instr-skip-regex [re]
+  (emitter/set-instrumentation-skip-regex re))
+
+(defn rm-instr-skip-regex []
+  (emitter/remove-instrumentation-skip-regex))
+
 (defn get-instr-prefixes []
   emitter/instrument-only-prefixes)
+
+(defn get-skip-prefixes []
+  emitter/instrument-skip-prefixes)
+
+(defn get-skip-regex []
+  emitter/instrument-skip-regex)
 
 (defn set-instrumentation [on?]
   (emitter/set-instrumentation on?))
