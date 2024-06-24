@@ -22,25 +22,33 @@
    :cljs (def instrument-skip-regex nil))
 
 #?(:clj (defn set-instrumentation [on?]
-          (alter-var-root #'instrument-enable (constantly on?))))
+          (alter-var-root #'instrument-enable (constantly on?)))
+   :cljs (defn set-instrumentation [_] (js/console.error "Not implemented")))
 
 #?(:clj (defn add-instrumentation-only-prefix [p]
-          (alter-var-root #'instrument-only-prefixes conj p)))
+          (alter-var-root #'instrument-only-prefixes conj p))
+   :cljs (defn add-instrumentation-only-prefix [_] (js/console.error "Not implemented")))
 
 #?(:clj (defn remove-instrumentation-only-prefix [p]
-          (alter-var-root #'instrument-only-prefixes (fn [iop] (remove #(= % p) iop)))))
+          (alter-var-root #'instrument-only-prefixes (fn [iop] (remove #(= % p) iop))))
+   :cljs (defn remove-instrumentation-only-prefix [_] (js/console.error "Not implemented")))
 
 #?(:clj (defn add-instrumentation-skip-prefix [p]
-          (alter-var-root #'instrument-skip-prefixes conj p)))
+          (alter-var-root #'instrument-skip-prefixes conj p))
+   :cljs (defn add-instrumentation-skip-prefix [_] (js/console.error "Not implemented")))
 
 #?(:clj (defn remove-instrumentation-skip-prefix [p]
-          (alter-var-root #'instrument-skip-prefixes (fn [isp] (remove #(= % p) isp)))))
+          (alter-var-root #'instrument-skip-prefixes (fn [isp] (remove #(= % p) isp))))
+   :cljs (defn remove-instrumentation-skip-prefix [_] (js/console.error "Not implemented")))
 
 #?(:clj (defn set-instrumentation-skip-regex [re]
-          (alter-var-root #'instrument-skip-regex (constantly (re-pattern re)))))
+          (alter-var-root #'instrument-skip-regex (constantly (re-pattern re))))
+   :cljs (defn set-instrumentation-skip-regex [_] (js/console.error "Not implemented")))
 
 #?(:clj (defn remove-instrumentation-skip-regex []
-          (alter-var-root #'instrument-skip-regex (constantly nil))))
+          (alter-var-root #'instrument-skip-regex (constantly nil)))
+   
+   :cljs (defn remove-instrumentation-skip-regex []) (js/console.error "Not implemented"))
 
 #?(:clj (defn skip-instrumentation? [ns-symb]
           (let [nsname (str ns-symb)
@@ -58,4 +66,5 @@
                               (and instrument? (not (re-find instrument-skip-regex nsname))))]
             ;; skip iff
             (or (not instrument-enable)
-                (not instrument?)))))
+                (not instrument?))))
+   :cljs (defn skip-instrumentation? [_] (js/console.error "Not implemented")))

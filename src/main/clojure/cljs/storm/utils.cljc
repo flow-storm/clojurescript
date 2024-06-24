@@ -112,3 +112,7 @@
              (Files/setLastModifiedTime 
               (.toPath f) 
               (FileTime/fromMillis (System/currentTimeMillis)))))))))
+
+(defn original-source-form [env]
+  (or (get-in env [:root-source-info :source-form]) ;; root form when called from vanilla cljs compiler
+      (:shadow.build/root-form env))) ;; root form when called from shadow

@@ -4407,7 +4407,7 @@
      :cljs [infer-type and-or/optimize check-invoke-arg-types]))
 
 (defn analyze* [env form name opts]
-  (let [top-level-form? (= form (get-in env [:root-source-info :source-form]))
+  (let [top-level-form? (= form (storm-utils/original-source-form env))
         skip-ns? (storm-emitter/skip-instrumentation? (get-in env [:ns :name]))
         form (cond-> form
                (and top-level-form? (not skip-ns?)) (storm-utils/tag-form-recursively :cljs.storm/coord))

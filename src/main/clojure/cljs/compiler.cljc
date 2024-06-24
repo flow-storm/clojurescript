@@ -21,7 +21,8 @@
                     [clojure.java.io :as io]
                     [clojure.set :as set]
                     [clojure.string :as string]
-                    [cljs.vendor.clojure.tools.reader :as reader])
+                    [cljs.vendor.clojure.tools.reader :as reader]
+                    [cljs.storm.utils :as storm-utils])
      :cljs (:require [cljs.analyzer :as ana]
                      [cljs.analyzer.impl :as ana.impl]
                      [cljs.env :as env]
@@ -230,7 +231,7 @@
                    (-> ast :info :fn-var))
                (assoc-in [:env :cljs.storm/skip-expr-instrumentation?] true))
         emit-register-form (fn []
-                             (let [orig-form (get root-source-info :source-form)]
+                             (let [orig-form (storm-utils/original-source-form env)]
                                (emits "\n cljs.storm.tracer.register_form("
                                       form-id
                                       ",\""
