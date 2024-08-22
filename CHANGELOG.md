@@ -6,6 +6,24 @@
         
 ### Changes 
     
+### Bugs fixed 
+
+## 1.11.132-6 (22-08-2024)
+	
+### New Features
+
+    - Add :emitted-coords to trace-form-init-fn form-data
+    
+### Changes 
+    
+### Bugs fixed
+    
+## 1.11.132-5 ()
+	
+### New Features
+    
+### Changes 
+    
 ### Bugs fixed
 
     - Fix for working with shadow-cljs >= 2.28.10
