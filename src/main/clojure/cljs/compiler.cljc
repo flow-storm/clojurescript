@@ -185,6 +185,8 @@
 
 (declare emits)
 (declare emit-list)
+(declare emit-set)
+(declare all-distinct?)
 (declare emit-constants-comma-sep)
 (declare emitln)
 
@@ -229,16 +231,17 @@
                
                (or (= :js-var (:op ast))              
                    (-> ast :info :fn-var))
-               (assoc-in [:env :cljs.storm/skip-expr-instrumentation?] true))
-        emit-register-form (fn []
-                             (let [orig-form (storm-utils/original-source-form env)]
-                               (emits "\n cljs.storm.tracer.register_form("
-                                      form-id
-                                      ",\""
-                                      form-ns
-                                      "\",")        
-                               (emit-list orig-form emit-constants-comma-sep)
-                               (emitln ");")))]
+               (assoc-in [:env :cljs.storm/skip-expr-instrumentation?] true)  )
+        emit-register-form (fn [orig-form emitted-coords-set]                             
+                             (emits "\n cljs.storm.tracer.register_form("
+                                    form-id
+                                    ",\""
+                                    form-ns
+                                    "\",")
+                             (emit-set emitted-coords-set emit-constants-comma-sep all-distinct?)
+                             (emits ",")
+                             (emit-list orig-form emit-constants-comma-sep)
+                             (emitln ");"))]
     
     (if (and instrument-enable?
              form-id
@@ -253,18 +256,20 @@
       ;; need to emmit unwrapped 
       
       (if (:shadow.build.compiler/repl-context env)
-
+        ;; shadow repl top-level-form
         (do
           (emitln "(function(){")
-          (emit-register-form)
+          ;; FIXME: we don't have emitted-coords-set at this point since (emit* ast') hasn't been called yet          
+          (emit-register-form (storm-utils/original-source-form env) #{}) 
           (emits "return ")
           (emit* ast')        
           (emitln "})()"))
-        
+
+        ;; else, top-level-form for file compilation or cljs.main repl forms
         (do
           (emit* ast')
           (emits ";")
-          (emit-register-form)))
+          (emit-register-form (storm-utils/original-source-form env) (-> ast' :env :cljs.storm/form-emitted-coords-set deref))))
       
       ;; else, just emit the ast
       (emit* ast'))))
@@ -518,13 +523,14 @@
                           (:cljs.storm/coord env#))))
           (let [coord# (string/join "," (or (:cljs.storm/coord env#)
                                             (:cljs.storm/wrapping-fn-coord env#)))
-                form-id# (:cljs.storm/form-id env#)]
-            
+                form-id# (:cljs.storm/form-id env#)
+                form-emitted-coords-set# (:cljs.storm/form-emitted-coords-set env#)]
             (case (:context env#)
               :return (if (:cljs.storm/skip-fn-trace? env#)                        
                         (do ~@body)
                         
-                        (do 
+                        (do
+                          (when form-emitted-coords-set# (swap! form-emitted-coords-set# conj coord#))
                           (emits (if (= :fn (:enclosing-context env#))
                                    ;; when returning from a fn block trace it like a fn return
                                    "cljs.storm.tracer.trace_fn_return( "
@@ -540,6 +546,7 @@
                                    ;; now if it is an :expr let's check env meta before instrumenting
                                    ;; since we don't want to trace everything like keywords, vectors, etc
                                    (do
+                                     (when form-emitted-coords-set# (swap! form-emitted-coords-set# conj coord#))
                                      (emits "cljs.storm.tracer.trace_expr( ")                           
                                      ~@body
                                      (emits ",\"" coord# "\"," form-id# ")"  )))  ))

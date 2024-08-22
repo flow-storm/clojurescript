@@ -37,12 +37,13 @@
   (when trace-bind-fn
     (trace-bind-fn nil coord sym-name val)))
 
-(defn register-form [form-id form-ns form]
+(defn register-form [form-id form-ns emitted-coords form]
   #_(dbg "Registering form" form-id form-ns form)
   (when trace-form-init-fn
     (let [form-data {:form-id form-id
                      :ns form-ns
                      :form form
+                     :emitted-coords emitted-coords
                      :file nil
                      :line nil}]
       (trace-form-init-fn form-data)))

@@ -4413,7 +4413,8 @@
                (and top-level-form? (not skip-ns?)) (storm-utils/tag-form-recursively :cljs.storm/coord))
         {:keys [cljs.storm/coord]} (meta form)
         env (cond-> env
-              top-level-form? (assoc :cljs.storm/form-id (hash form))
+              top-level-form? (assoc :cljs.storm/form-id (hash form)
+                                     :cljs.storm/form-emitted-coords-set (atom #{}))
               (not skip-ns?)  (assoc :cljs.storm/instrument-enable? true))
         passes *passes*
         passes (if (nil? passes)
