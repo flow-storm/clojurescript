@@ -5,6 +5,8 @@
 ### New Features
         
 ### Changes 
+
+    - Add cljs.storm.utils to compiler cljs path to get rid of a weird warning
     
 ### Bugs fixed 
 

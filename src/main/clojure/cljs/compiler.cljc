@@ -30,7 +30,8 @@
                      [cljs.tools.reader :as reader]
                      [clojure.set :as set]
                      [clojure.string :as string]
-                     [goog.string :as gstring]))
+                     [goog.string :as gstring]
+                     [cljs.storm.utils :as storm-utils]))
   #?(:clj (:import [cljs.tagged_literals JSValue]
                    java.lang.StringBuilder
                    [java.io File Writer]
