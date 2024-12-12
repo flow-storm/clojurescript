@@ -3489,3 +3489,20 @@
              resolved (vary-meta (:name var) assoc ::ana/no-resolve true)]
     `(when (exists? ~resolved)
        (cljs.core/Var. (fn [] ~resolved) '~resolved ~meta))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; This is kind of hacky since it is only useful with FlowStorm,          ;;
+;; but I haven't found a way of injecting this macros from FlowStorm code ;;
+;; so they are available to users without requiring anything.             ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(core/defmacro bookmark
+  ([note]
+   `(vary-meta (symbol "flow-storm" "bookmark")
+               assoc
+               :flow-storm.bookmark/note ~(pr-str note)))
+  ([] `(bookmark nil)))
+
+(core/defmacro debugger
+  [& args]
+  `(bookmark ~@args))

@@ -6,6 +6,16 @@
         
 ### Changes 
 
+    - Add debugger and bookmark macros for FlowStorm ergonomics
+    
+### Bugs fixed 
+
+## 1.11.132-7 (30-10-2024)
+	
+### New Features
+        
+### Changes 
+
     - Add cljs.storm.utils to compiler cljs path to get rid of a weird warning
     
 ### Bugs fixed 
