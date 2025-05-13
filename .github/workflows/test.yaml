@@ -235,7 +235,6 @@ jobs:
         shell: powershell
 
   # CLI Tests
-<<<<<<< HEAD
   cli-test:
     name: CLI Tests
     runs-on: macos-14
@@ -272,30 +271,6 @@ jobs:
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
           restore-keys: |
             ${{ runner.os }}-${{ env.cache-name }}-
-=======
-
-  # cli-test:
-  #   name: CLI Tests
-  #   runs-on: macos-12
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #       with:
-  #         fetch-depth: 0
-
-  #     - uses: DeLaGuardo/setup-clojure@3.1
-  #       with:
-  #         tools-deps: '1.10.1.763'
-
-  #     - name: Cache maven
-  #       uses: actions/cache@v2
-  #       env:
-  #         cache-name: cache-maven
-  #       with:
-  #         path: ~/.m2
-  #         key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/deps.edn') }}
-  #         restore-keys: |
-  #           ${{ runner.os }}-${{ env.cache-name }}-
->>>>>>> ede01ae7 (Big patch)
 
   #     - name: Cache gitlibs
   #       uses: actions/cache@v2
