@@ -7,7 +7,17 @@
 ### Changes 
         
 ### Bugs fixed 
-    
+
+## 1.12.42-1 (25-09-2025)
+	
+### New Features
+
+    - Allow for multiple instrumentation prefixes properties useful for plugins
+        
+### Changes 
+        
+### Bugs fixed 
+
 ## 1.11.132-9 (13-03-2024)
 	
 ### New Features
