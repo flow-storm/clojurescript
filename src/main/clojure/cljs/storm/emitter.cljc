@@ -1,19 +1,29 @@
 (ns cljs.storm.emitter
   (:require [clojure.string :as str]))
 
+#?(:clj
+   (defn prefixes-for-prop-starting-with [prop-prefix]
+     (reduce-kv (fn [prefixes prop-name prop-val]
+                  (if (str/starts-with? prop-name prop-prefix)
+                    (->> (str/split prop-val #",")
+                         (map str/trim)
+                         (remove str/blank?)
+                         (into prefixes))
+                    prefixes))
+                []
+                (into {} (System/getProperties)))))
+
 #?(:clj (def instrument-enable
           (some-> (System/getProperty "cljs.storm.instrumentEnable")
                   Boolean/parseBoolean))
    :cljs (def instrument-enable nil))
 
 #?(:clj (def instrument-only-prefixes
-          (some-> (System/getProperty "cljs.storm.instrumentOnlyPrefixes")
-                  (str/split #",")))
+          (prefixes-for-prop-starting-with "cljs.storm.instrumentOnlyPrefixes"))
    :cljs (def instrument-only-prefixes nil))
 
 #?(:clj (def instrument-skip-prefixes
-          (some-> (System/getProperty "cljs.storm.instrumentSkipPrefixes")
-                  (str/split #",")))
+          (prefixes-for-prop-starting-with "cljs.storm.instrumentSkipPrefixes"))
    :cljs (def instrument-skip-prefixes nil))
 
 #?(:clj (def instrument-skip-regex
