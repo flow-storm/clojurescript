@@ -123,7 +123,7 @@
                         (.replace "\\" "/"))]  
        (->> (file-seq dir-file)
             (filterv (fn [f]
-                       (or (str/ends-with? (.getName f) ".clj")
+                       (or (str/ends-with? (.getName f) ".cljs")
                            (str/ends-with? (.getName f) ".cljc"))))
             (keep (fn [f]
                     (let [f-path (-> (.getAbsolutePath f)
