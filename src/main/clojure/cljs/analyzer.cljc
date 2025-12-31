@@ -2281,7 +2281,7 @@ x                          (not (contains? ret :info)))
        :type type
        :form form
        :recurs recurs
-       :cljs.storm/coord (-> form meta :cljs.storm/coord)}
+       :cljs.storm/coord (storm-utils/coord-of form)}
       (if (some? expr)
         {:body (assoc expr :body? true)
          :children [:params :body]}
@@ -2351,7 +2351,7 @@ x                          (not (contains? ret :info)))
         skip-expr-instrumentation? (or (:cljs.storm/skip-expr-instrumentation? form-meta)
                                        (:cljs.storm/skip-expr-instrumentation? (meta name)))
         fn-trace-name (:cljs.storm/fn-trace-name form-meta)
-        form-coord (-> form meta :cljs.storm/coord)
+        form-coord (storm-utils/coord-of form)
         env (cond-> env              
               true           (assoc :enclosing-context :fn)
               true           (assoc :cljs.storm/wrapping-fn-coord form-coord)
@@ -2538,7 +2538,7 @@ x                          (not (contains? ret :info)))
               be {:op :binding
                   :name name
                   :form name
-                  :cljs.storm/coord (-> name meta :cljs.storm/coord)
+                  :cljs.storm/coord (storm-utils/coord-of name)
                   :line line
                   :column col
                   :init init-expr
@@ -4155,7 +4155,8 @@ x                          (not (contains? ret :info)))
     (do
       (register-constant! env sym)
       (analyze-wrap-meta {:op :const :val sym :env env :form sym :tag 'cljs.core/Symbol}))
-    (let [{:keys [line column cljs.storm/coord]} (meta sym)
+    (let [{:keys [line column]} (meta sym)
+          coord (storm-utils/coord-of sym)
           env  (if-not (nil? line)
                  (assoc env :line line)
                  env)
@@ -4667,7 +4668,7 @@ x                          (not (contains? ret :info)))
         skip-ns? (storm-emitter/skip-instrumentation? (get-in env [:ns :name]))
         form (cond-> form
                (and top-level-form? (not skip-ns?)) (storm-utils/tag-form-recursively :cljs.storm/coord))
-        {:keys [cljs.storm/coord]} (meta form)
+        coord (storm-utils/coord-of form)
         env (cond-> env
               top-level-form? (assoc :cljs.storm/form-id (hash form)
                                      :cljs.storm/form-emitted-coords-set (atom #{}))

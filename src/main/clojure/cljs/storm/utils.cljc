@@ -4,6 +4,18 @@
   #?(:clj (:import [java.nio.file Files]
                    [java.nio.file.attribute FileTime])))
 
+(defn coord-of [form]
+  (if-let [coord (-> form meta :cljs.storm/coord)]
+    coord
+    (when (and form
+               (seq? form)
+               (pos? (count form)))
+     ;; If the form is a list and has no coord, maybe it was
+     ;; destroyed by a macro. Try guessing the coord by looking at
+     ;; the first element. This fixes `->`, for instance.
+
+      (-> form first meta :cljs.storm/coord))))
+
 (defn merge-meta
 
   "Non-throwing version of (vary-meta obj merge metamap-1 metamap-2 ...).
