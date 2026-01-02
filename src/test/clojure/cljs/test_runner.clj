@@ -17,9 +17,11 @@
             [cljs.transpile-tests]
             [cljs.type-inference-tests]
             [cljs.util-tests]
-            [clojure.test :refer [run-tests]]))
+            [clojure.test :refer [run-tests]]
+            [cljs.storm.emitter :as storm-emitter]))
 
 (defn -main []
+  (storm-emitter/set-instrumentation false)
   (let [{:keys [fail error]}
         (run-tests
           'cljs.analyzer-api-tests
