@@ -524,7 +524,7 @@
                           (:cljs.storm/coord env#))))
           (let [coord# (string/join "," (or (:cljs.storm/coord env#)
                                             (:cljs.storm/wrapping-fn-coord env#)))
-                form-id# (:cljs.storm/form-id env#)
+                form-id# (or (:cljs.storm/form-id env#) 0) ;; this zero is hacky, but is here just fixing the repl wrapping expression that doesn't contain a form-id
                 form-emitted-coords-set# (:cljs.storm/form-emitted-coords-set env#)]
             (case (:context env#)
               :return (if (:cljs.storm/skip-fn-trace? env#)                        
@@ -540,7 +540,7 @@
                                    ;; (could be let or loop) trace it like a expression
                                    "cljs.storm.tracer.trace_expr( "))
                           ~@body
-                          (emits ",\"" coord# "\"," form-id# ")"  )))
+                          (emits ",\"" coord# "\"," form-id# ", cljs_storm_frame_id)"  )))
               (:expr :statement) (if (:cljs.storm/skip-expr-instrumentation?  env#)
                                    (do ~@body)
                                    
@@ -550,7 +550,7 @@
                                      (when form-emitted-coords-set# (swap! form-emitted-coords-set# conj coord#))
                                      (emits "cljs.storm.tracer.trace_expr( ")                           
                                      ~@body
-                                     (emits ",\"" coord# "\"," form-id# ")"  )))  ))
+                                     (emits ",\"" coord# "\"," form-id# ", cljs_storm_frame_id)"  )))  ))
 
           ;; if instrumentation isn't enable or we don't have a coord
           ;; just don't instrument anything
@@ -1067,7 +1067,7 @@
             (string/join "," let-coord)                
             "\",\""
             (:name binding)
-            "\");")))
+            "\", cljs_storm_frame_id);")))
 
 (defn emit-fn-method
   [{expr :body :keys [type name params env recurs cljs.storm/coord]}]
@@ -1077,7 +1077,7 @@
         async (:async env)
         fn-trace-name (or fn-trace-name (str (:name name)))
         instrument? (and instrument-enable? (not skip-fn-trace?))
-        coord (string/join "," (or coord wrapping-fn-coord))]
+        effective-coord (or coord wrapping-fn-coord)]
     (emit-wrap env 
               (emits "(" (when async "async ") "function " (munge name) "(")
               (emit-fn-params params)
@@ -1085,18 +1085,19 @@
 
               ;; added by ClojureStorm
               (when instrument?
+                (emitln "let cljs_storm_frame_id=crypto.randomUUID();")
                 (emitln "try {")
-                (let []
-                  (emits "cljs.storm.tracer.trace_fn_call(arguments,\""
-                         (str (get-in env [:ns :name]))
-                         "\",\""
-                         fn-trace-name                          
-                         "\","
-                         form-id))
+                (emits "cljs.storm.tracer.trace_fn_call(arguments,\""
+                       (str (get-in env [:ns :name]))
+                       "\",\""
+                       fn-trace-name                          
+                       "\","
+                       form-id
+                       ",cljs_storm_frame_id")
                 (emitln ");")
 
                 (doseq [param-binding params]
-                  (storm-emit-binding-trace env param-binding coord)))
+                  (storm-emit-binding-trace env param-binding effective-coord)))
               
               (when type
                 (emitln "var self__ = this;"))
@@ -1110,10 +1111,10 @@
               (when instrument?
                 (emitln "} catch (clojure_storm_error) {")
                 (emitln "cljs.storm.tracer.trace_fn_unwind(clojure_storm_error,\""
-                       coord                       
+                        (string/join "," effective-coord)                        
                        "\","
                        form-id
-                       ");")
+                       ", cljs_storm_frame_id);")
                 (emitln "throw clojure_storm_error;")
                 (emitln "}"))
               

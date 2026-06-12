@@ -3941,7 +3941,11 @@ x                          (not (contains? ret :info)))
         segs      (js-star-seg jsform)
         tag       (get-js-tag form)
         js-op     (:js-op form-meta)
-        argexprs  (analyze-js-star-args js-op enve args)
+        argexprs  (analyze-js-star-args
+                   js-op
+                   (cond-> enve
+                     (= 'cljs.core/await js-op) (assoc :cljs.storm/skip-expr-instrumentation? true))
+                   args)
         numeric   (:numeric form-meta)
         validate  (fn [warning-type valid-types?]
                     (let [types (map #(infer-tag env %) argexprs)]
